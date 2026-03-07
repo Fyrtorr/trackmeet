@@ -345,7 +345,7 @@ export const useGameStore = create<GameState & GameActions>((set, get) => ({
         return;
       }
 
-      // Foul but still have attempts
+      // Foul but still have attempts — show result, advanceGame handles rotation
       updatedPlayer.eventResults = [
         ...updatedPlayer.eventResults.filter(r => r.eventId !== event.id),
         {
@@ -357,14 +357,7 @@ export const useGameStore = create<GameState & GameActions>((set, get) => ({
         },
       ];
       updatedPlayers[playerIndex] = updatedPlayer;
-
-      const maxAttempts = event.type === 'field_throw' || event.type === 'field_jump' ? 3 : 1;
-      const nextAttempt = state.currentAttempt + 1;
-      if (nextAttempt >= maxAttempts) {
-        set({ players: updatedPlayers, lastRoll: dice, lastResult: result, phase: 'eventComplete' });
-      } else {
-        set({ players: updatedPlayers, lastRoll: dice, lastResult: result, currentAttempt: nextAttempt, phase: 'choosingEffort' });
-      }
+      set({ players: updatedPlayers, lastRoll: dice, lastResult: result, phase: 'showingResult' });
       return;
     }
 
@@ -423,12 +416,8 @@ export const useGameStore = create<GameState & GameActions>((set, get) => ({
       updatedPlayer.totalPoints = updatedPlayer.eventResults.reduce((sum, r) => sum + r.points, 0);
       updatedPlayers[playerIndex] = updatedPlayer;
 
-      const nextAttempt = state.currentAttempt + 1;
-      if (nextAttempt >= 3) {
-        set({ players: updatedPlayers, lastRoll: dice, lastResult: resolvedResult, phase: 'showingResult' });
-      } else {
-        set({ players: updatedPlayers, lastRoll: dice, lastResult: resolvedResult, currentAttempt: nextAttempt, phase: 'showingResult' });
-      }
+      // Don't increment currentAttempt here — advanceGame handles round rotation
+      set({ players: updatedPlayers, lastRoll: dice, lastResult: resolvedResult, phase: 'showingResult' });
 
     } else if (event.type === 'multi_segment') {
       // 400m (4 segments) or 1500m (5 segments)
@@ -504,10 +493,43 @@ export const useGameStore = create<GameState & GameActions>((set, get) => ({
     if (!event) return;
 
     if (state.phase === 'eventComplete' || state.phase === 'showingResult') {
-      // Check if more attempts remain for field events
-      if ((event.type === 'field_throw' || event.type === 'field_jump') && state.currentAttempt < 2) {
-        set({ phase: 'choosingEffort' });
-        return;
+      const isFieldEvent = event.type === 'field_throw' || event.type === 'field_jump';
+
+      // Field events: round-robin (all players do attempt 1, then 2, then 3)
+      if (isFieldEvent) {
+        const nextPlayerIndex = state.currentPlayerIndex + 1;
+        if (nextPlayerIndex < state.players.length) {
+          // Next player, same round
+          const nextPlayer = state.players[nextPlayerIndex];
+          const updates: Partial<GameState> = {
+            currentPlayerIndex: nextPlayerIndex,
+            lastRoll: null,
+            lastResult: null,
+            phase: 'choosingEffort' as const,
+          };
+          if (nextPlayer.injuryInEffect && event.order >= nextPlayer.injuryInEffect.expiresAfterEventOrder) {
+            const updatedPlayers = [...state.players];
+            updatedPlayers[nextPlayerIndex] = { ...nextPlayer, injuryInEffect: null };
+            set({ ...updates, players: updatedPlayers });
+          } else {
+            set(updates);
+          }
+          return;
+        }
+        // All players done with this round
+        const nextAttempt = state.currentAttempt + 1;
+        if (nextAttempt < 3) {
+          // Next round, back to first player
+          set({
+            currentAttempt: nextAttempt,
+            currentPlayerIndex: 0,
+            lastRoll: null,
+            lastResult: null,
+            phase: 'choosingEffort',
+          });
+          return;
+        }
+        // All 3 rounds done — fall through to next event
       }
 
       // For multi-segment not yet complete
@@ -516,42 +538,43 @@ export const useGameStore = create<GameState & GameActions>((set, get) => ({
         return;
       }
 
-      // Move to next player
-      const nextPlayerIndex = state.currentPlayerIndex + 1;
-      if (nextPlayerIndex < state.players.length) {
-        // Check injury expiry for next player
-        const nextPlayer = state.players[nextPlayerIndex];
-        if (nextPlayer.injuryInEffect && event.order >= nextPlayer.injuryInEffect.expiresAfterEventOrder) {
-          const updatedPlayers = [...state.players];
-          updatedPlayers[nextPlayerIndex] = { ...nextPlayer, injuryInEffect: null };
-          set({
-            players: updatedPlayers,
-            currentPlayerIndex: nextPlayerIndex,
-            currentAttempt: 0,
-            currentSegment: 0,
-            lastRoll: null,
-            lastResult: null,
-            phase: 'choosingEffort',
-          });
-        } else {
-          set({
-            currentPlayerIndex: nextPlayerIndex,
-            currentAttempt: 0,
-            currentSegment: 0,
-            lastRoll: null,
-            lastResult: null,
-            phase: 'choosingEffort',
-          });
+      // Non-field events: move to next player
+      if (!isFieldEvent) {
+        const nextPlayerIndex = state.currentPlayerIndex + 1;
+        if (nextPlayerIndex < state.players.length) {
+          const nextPlayer = state.players[nextPlayerIndex];
+          if (nextPlayer.injuryInEffect && event.order >= nextPlayer.injuryInEffect.expiresAfterEventOrder) {
+            const updatedPlayers = [...state.players];
+            updatedPlayers[nextPlayerIndex] = { ...nextPlayer, injuryInEffect: null };
+            set({
+              players: updatedPlayers,
+              currentPlayerIndex: nextPlayerIndex,
+              currentAttempt: 0,
+              currentSegment: 0,
+              lastRoll: null,
+              lastResult: null,
+              phase: 'choosingEffort',
+            });
+          } else {
+            set({
+              currentPlayerIndex: nextPlayerIndex,
+              currentAttempt: 0,
+              currentSegment: 0,
+              lastRoll: null,
+              lastResult: null,
+              phase: 'choosingEffort',
+            });
+          }
+          // Reset per-event counters for next player
+          const updatedPlayers = [...get().players];
+          updatedPlayers[get().currentPlayerIndex] = {
+            ...updatedPlayers[get().currentPlayerIndex],
+            falseStarts: 0,
+            consecutiveFouls: 0,
+          };
+          set({ players: updatedPlayers });
+          return;
         }
-        // Reset per-event counters for next player
-        const updatedPlayers = [...get().players];
-        updatedPlayers[get().currentPlayerIndex] = {
-          ...updatedPlayers[get().currentPlayerIndex],
-          falseStarts: 0,
-          consecutiveFouls: 0,
-        };
-        set({ players: updatedPlayers });
-        return;
       }
 
       // All players done with this event — move to next event

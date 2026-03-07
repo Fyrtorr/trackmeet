@@ -105,9 +105,11 @@ export function GameScreen() {
   const sprintWaitingForRace = isSprint && allPlayersRolled && !raceComplete
 
   const showAdvance = hasResult && !isRolling && !sprintWaitingForRace && !sprintRaceInProgress
+  const isFieldEvent = event.type === 'field_throw' || event.type === 'field_jump'
+  const isLastPlayer = state.currentPlayerIndex >= state.players.length - 1
   const isEventDone = (
     event.type === 'sprint' ||
-    (event.type === 'field_throw' || event.type === 'field_jump') && state.currentAttempt >= 2 ||
+    isFieldEvent && state.currentAttempt >= 2 && isLastPlayer ||
     event.type === 'multi_segment' && state.currentSegment >= (event.segments ?? 0) ||
     state.phase === 'eventComplete'
   )

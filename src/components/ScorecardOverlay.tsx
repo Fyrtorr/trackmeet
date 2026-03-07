@@ -11,6 +11,7 @@ interface ScorecardOverlayProps {
 
 export function ScorecardOverlay({ players, currentEventId, onClose }: ScorecardOverlayProps) {
   const sorted = [...players].sort((a, b) => b.totalPoints - a.totalPoints)
+  const leaderPoints = sorted[0]?.totalPoints ?? 0
 
   return (
     <div className="scorecard-overlay" onClick={onClose}>
@@ -26,10 +27,12 @@ export function ScorecardOverlay({ players, currentEventId, onClose }: Scorecard
             <h3>Standings</h3>
             {sorted.map((p, i) => {
               const g = getAthleteGraphic(p.athleteId)
+              const behind = leaderPoints - p.totalPoints
               return (
                 <div key={p.id} className="scm-standing" style={{ borderLeftColor: g.color }}>
                   <span className="scm-pos">{i + 1}</span>
                   <span className="scm-name">{p.name}</span>
+                  {behind > 0 && <span className="scm-behind">-{behind}</span>}
                   <span className="scm-total">{p.totalPoints} pts</span>
                 </div>
               )

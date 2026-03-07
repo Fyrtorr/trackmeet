@@ -98,6 +98,13 @@
   font-weight: 600;
 }
 
+.scm-behind {
+  font-size: 0.75rem;
+  color: var(--color-danger);
+  font-weight: 600;
+  margin-right: 0.5rem;
+}
+
 .scm-total {
   font-weight: 700;
   color: var(--color-accent);
