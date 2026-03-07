@@ -53,6 +53,7 @@ export interface AthleteData {
   abilities: Record<string, string>;   // event_id -> "Poor" | "Fair" | "Good" | "Excellent"
   hjSuccessRates: Record<string, number>;
   pvSuccessRates: Record<string, number>;
+  throwStyle?: 'glide' | 'spin';         // shot put technique (pre-1990 glide, post-1990 spin)
   events: Record<string, EventChart>;  // event_id -> chart
 }
 

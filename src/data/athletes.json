@@ -8,6 +8,7 @@
       "weight": "198 lbs"
     },
     "handicap": 35,
+    "throwStyle": "glide",
     "abilities": {
       "100m": "Poor",
       "long_jump": "Good",
@@ -1573,6 +1574,7 @@
       "weight": "190 lbs"
     },
     "handicap": -337,
+    "throwStyle": "glide",
     "abilities": {
       "100m": "",
       "long_jump": "Good",
@@ -3137,6 +3139,7 @@
       "weight": "185 lbs"
     },
     "handicap": -77,
+    "throwStyle": "spin",
     "abilities": {
       "100m": "",
       "long_jump": "Good",

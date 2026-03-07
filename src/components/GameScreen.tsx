@@ -11,6 +11,7 @@ import { TrackAnimation } from './animations/TrackAnimation'
 import { HeightAnimation } from './animations/HeightAnimation'
 import { RaceTrack } from './animations/RaceTrack'
 import { LongJumpPit } from './animations/LongJumpPit'
+import { ShotPutRing } from './animations/ShotPutRing'
 import { clearsHeight } from '../game/chartLookup'
 import { getAthleteGraphic } from '../data/athleteGraphics'
 import athleteData from '../data/athletes.json'
@@ -26,6 +27,7 @@ export function GameScreen() {
   const [raceTriggered, setRaceTriggered] = useState(false)
   const [raceComplete, setRaceComplete] = useState(false)
   const [jumpTrigger, setJumpTrigger] = useState(0)
+  const [throwTrigger, setThrowTrigger] = useState(0)
   const [showScorecard, setShowScorecard] = useState(false)
 
   const event = EVENTS[state.currentEventIndex]
@@ -37,6 +39,7 @@ export function GameScreen() {
 
   const isSprint = event?.type === 'sprint'
   const isLongJump = event?.id === 'long_jump'
+  const isShotPut = event?.id === 'shot_put'
 
   // Check if all players have rolled for this sprint event
   const allPlayersRolled = isSprint && state.players.every(p =>
@@ -66,8 +69,11 @@ export function GameScreen() {
 
   const handleRollComplete = useCallback(() => {
     setIsRolling(false)
-    if (EVENTS[useGameStore.getState().currentEventIndex]?.id === 'long_jump') {
+    const currentEventId = EVENTS[useGameStore.getState().currentEventIndex]?.id
+    if (currentEventId === 'long_jump') {
       setJumpTrigger(t => t + 1)
+    } else if (currentEventId === 'shot_put') {
+      setThrowTrigger(t => t + 1)
     }
   }, [])
 
@@ -151,6 +157,21 @@ export function GameScreen() {
         </div>
       )}
 
+      {/* Shot put ring */}
+      {isShotPut && (
+        <div className="race-track-container">
+          <ShotPutRing
+            players={state.players}
+            currentPlayerIndex={state.currentPlayerIndex}
+            eventId={event.id}
+            lastResult={state.lastResult?.numericValue ?? null}
+            lastResultDisplay={state.lastResult?.displayValue ?? ''}
+            isSpecial={state.lastResult?.isSpecial ?? false}
+            throwTrigger={throwTrigger}
+          />
+        </div>
+      )}
+
       {/* Long jump pit */}
       {isLongJump && (
         <div className="race-track-container">
@@ -188,7 +209,7 @@ export function GameScreen() {
           />
 
           {/* Event animations (generic fallback) */}
-          {hasResult && !isRolling && !isSpecial && !isSprint && !isLongJump && (
+          {hasResult && !isRolling && !isSpecial && !isSprint && !isLongJump && !isShotPut && (
             <>
               {(event.type === 'field_throw' || event.type === 'field_jump') && (
                 <FieldAnimation
