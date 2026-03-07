@@ -104,6 +104,23 @@
   padding: 2rem 0;
 }
 
+.start-event-selector {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+  font-size: 0.85rem;
+}
+
+.start-event-selector label {
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+.start-event-selector select {
+  flex: 1;
+}
+
 .start-btn {
   width: 100%;
   padding: 0.8em;

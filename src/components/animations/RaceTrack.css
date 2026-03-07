@@ -1,0 +1,151 @@
+.race-track {
+  position: relative;
+  width: 100%;
+  height: 220px;
+  background: #c4522a;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 2px solid #a03e1e;
+}
+
+/* Lanes */
+.race-lane {
+  position: relative;
+  height: calc(100% / 8);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  display: flex;
+  align-items: center;
+}
+
+.race-lane:last-child {
+  border-bottom: none;
+}
+
+.lane-number {
+  position: absolute;
+  left: 6px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.5);
+  z-index: 2;
+  font-family: 'Consolas', monospace;
+}
+
+/* Start line */
+.race-start-line {
+  position: absolute;
+  left: 10%;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: white;
+  opacity: 0.7;
+  z-index: 1;
+}
+
+/* Finish line — checkered pattern */
+.race-finish-line {
+  position: absolute;
+  right: 8%;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  z-index: 1;
+  background: repeating-linear-gradient(
+    to bottom,
+    white 0px, white 4px,
+    #222 4px, #222 8px
+  );
+  opacity: 0.85;
+}
+
+/* Runners */
+.race-runner {
+  position: absolute;
+  left: 5%;
+  display: flex;
+  align-items: center;
+  z-index: 3;
+}
+
+.race-runner.racing,
+.race-runner.finished {
+  animation: runner-race var(--race-duration, 3.5s) cubic-bezier(0.4, 0.0, 1.0, 1.0) forwards;
+}
+
+@keyframes runner-race {
+  0% {
+    left: 5%;
+  }
+  100% {
+    left: 95%;
+  }
+}
+
+.runner-icon {
+  font-size: 1.2rem;
+  filter: drop-shadow(0 1px 2px rgba(0,0,0,0.4));
+}
+
+/* Flip the runner emoji to face right (toward finish line) */
+.runner-figure {
+  display: inline-block;
+  transform: scaleX(-1);
+}
+
+/* Name tag — to the right of runner at start */
+.runner-name-tag {
+  position: absolute;
+  left: 2rem;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 0.55rem;
+  font-weight: 600;
+  color: white;
+  padding: 1px 6px;
+  border-radius: 3px;
+  white-space: nowrap;
+  opacity: 0.9;
+}
+
+/* Time tag after finish — to the right of runner */
+.runner-time-tag {
+  position: absolute;
+  left: 2rem;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: white;
+  background: rgba(0, 0, 0, 0.7);
+  padding: 2px 6px;
+  border-radius: 3px;
+  white-space: nowrap;
+  animation: pop-in 0.3s ease-out;
+}
+
+@keyframes pop-in {
+  0% { opacity: 0; transform: translateY(-50%) scale(0.5); }
+  100% { opacity: 1; transform: translateY(-50%) scale(1); }
+}
+
+/* SET overlay */
+.race-overlay-text {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 2.5rem;
+  font-weight: 900;
+  color: white;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+  z-index: 10;
+  letter-spacing: 0.2em;
+  animation: flash-text 0.6s ease-out;
+}
+
+@keyframes flash-text {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(2); }
+  30% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  100% { opacity: 1; }
+}

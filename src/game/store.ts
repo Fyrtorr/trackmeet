@@ -107,7 +107,7 @@ interface GameActions {
   updateSettings: (settings: Partial<GameSettings>) => void;
   addPlayer: (name: string, athleteId: string) => void;
   removePlayer: (id: number) => void;
-  startGame: () => void;
+  startGame: (startEventIndex?: number) => void;
 
   // Gameplay
   chooseEffort: (effort: EffortType) => void;
@@ -137,11 +137,11 @@ export const useGameStore = create<GameState & GameActions>((set, get) => ({
   removePlayer: (id) =>
     set((s) => ({ players: s.players.filter(p => p.id !== id) })),
 
-  startGame: () =>
+  startGame: (startEventIndex?: number) =>
     set({
       phase: 'choosingEffort',
       currentPlayerIndex: 0,
-      currentEventIndex: 0,
+      currentEventIndex: startEventIndex ?? 0,
       currentAttempt: 0,
       currentSegment: 0,
     }),

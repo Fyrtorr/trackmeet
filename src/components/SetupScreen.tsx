@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useGameStore } from '../game/store'
+import { EVENTS } from '../data/events'
 import athleteData from '../data/athletes.json'
 import './SetupScreen.css'
 
@@ -14,13 +15,15 @@ export function SetupScreen() {
   const { players, addPlayer, removePlayer, startGame } = useGameStore()
   const [playerName, setPlayerName] = useState('')
   const [selectedAthlete, setSelectedAthlete] = useState(athletes[0]?.id ?? '')
+  const [startEventIndex, setStartEventIndex] = useState(0)
 
   const usedAthletes = players.map(p => p.athleteId)
   const availableAthletes = athletes.filter(a => !usedAthletes.includes(a.id))
 
   function handleAddPlayer() {
-    if (!playerName.trim() || !selectedAthlete) return
-    addPlayer(playerName.trim(), selectedAthlete)
+    if (!selectedAthlete) return
+    const name = playerName.trim() || athletes.find(a => a.id === selectedAthlete)?.name || 'Player'
+    addPlayer(name, selectedAthlete)
     setPlayerName('')
     const next = athletes.find(a => !usedAthletes.includes(a.id) && a.id !== selectedAthlete)
     if (next) setSelectedAthlete(next.id)
@@ -63,7 +66,7 @@ export function SetupScreen() {
             </select>
             <button
               onClick={handleAddPlayer}
-              disabled={!playerName.trim() || availableAthletes.length === 0}
+              disabled={availableAthletes.length === 0}
             >
               Add
             </button>
@@ -87,9 +90,23 @@ export function SetupScreen() {
             )}
           </div>
 
+          <div className="start-event-selector">
+            <label>Start at event:</label>
+            <select
+              value={startEventIndex}
+              onChange={(e) => setStartEventIndex(Number(e.target.value))}
+            >
+              {EVENTS.map((ev, i) => (
+                <option key={ev.id} value={i}>
+                  {ev.order}. {ev.name} (Day {ev.day})
+                </option>
+              ))}
+            </select>
+          </div>
+
           <button
             className="primary start-btn"
-            onClick={startGame}
+            onClick={() => startGame(startEventIndex)}
             disabled={!canStart}
           >
             Start Decathlon

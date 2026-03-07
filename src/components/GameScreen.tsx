@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { useGameStore } from '../game/store'
 import { EVENTS } from '../data/events'
 import { DiceDisplay } from './DiceDisplay'
@@ -8,7 +8,9 @@ import { Scoresheet } from './Scoresheet'
 import { FieldAnimation } from './animations/FieldAnimation'
 import { TrackAnimation } from './animations/TrackAnimation'
 import { HeightAnimation } from './animations/HeightAnimation'
+import { RaceTrack } from './animations/RaceTrack'
 import { clearsHeight } from '../game/chartLookup'
+import { getAthleteGraphic } from '../data/athleteGraphics'
 import athleteData from '../data/athletes.json'
 import type { EffortType, AthleteData } from '../types'
 import './GameScreen.css'
@@ -19,6 +21,8 @@ export function GameScreen() {
   const state = useGameStore()
   const [isRolling, setIsRolling] = useState(false)
   const [chosenEffort, setChosenEffort] = useState<EffortType | null>(null)
+  const [raceTriggered, setRaceTriggered] = useState(false)
+  const [raceComplete, setRaceComplete] = useState(false)
 
   const event = EVENTS[state.currentEventIndex]
   const player = state.players[state.currentPlayerIndex]
@@ -26,6 +30,28 @@ export function GameScreen() {
 
   const stamina = event?.day === 1 ? player?.staminaDay1 ?? 0 : player?.staminaDay2 ?? 0
   const injuryActive = player?.injuryInEffect !== null
+
+  const isSprint = event?.type === 'sprint'
+
+  // Check if all players have rolled for this sprint event
+  const allPlayersRolled = isSprint && state.players.every(p =>
+    p.eventResults.some(r => r.eventId === event.id)
+  )
+
+  // Detect when last player's roll animation finishes → trigger race
+  useEffect(() => {
+    if (allPlayersRolled && !isRolling && !raceTriggered) {
+      // Small delay so the player sees their result briefly
+      const timer = setTimeout(() => setRaceTriggered(true), 600)
+      return () => clearTimeout(timer)
+    }
+  }, [allPlayersRolled, isRolling, raceTriggered])
+
+  // Reset race state when event changes
+  useEffect(() => {
+    setRaceTriggered(false)
+    setRaceComplete(false)
+  }, [state.currentEventIndex])
 
   const handleEffortSelect = useCallback((effort: EffortType) => {
     setChosenEffort(effort)
@@ -42,6 +68,10 @@ export function GameScreen() {
     setChosenEffort(null)
     state.advanceGame()
   }, [state])
+
+  const handleRaceComplete = useCallback(() => {
+    setRaceComplete(true)
+  }, [])
 
   if (!event || !player || !athlete) return null
 
@@ -63,8 +93,13 @@ export function GameScreen() {
     allOutCost = event.id === '1500m' ? 6 : 2
   }
 
+  // For sprint events: hide normal advance until race is done
+  const sprintRaceInProgress = isSprint && raceTriggered && !raceComplete
+  const sprintWaitingForRace = isSprint && allPlayersRolled && !raceComplete
+
   // Check if we should show advance button
-  const showAdvance = hasResult && !isRolling
+  const showAdvance = hasResult && !isRolling && !sprintWaitingForRace && !sprintRaceInProgress
+  // For sprints after race, always show "Next" to go to next event
   const isEventDone = (
     event.type === 'sprint' ||
     (event.type === 'field_throw' || event.type === 'field_jump') && state.currentAttempt >= 2 ||
@@ -76,6 +111,9 @@ export function GameScreen() {
   // Result display
   const lastResultDisplay = state.lastResult?.displayValue ?? ''
   const isSpecial = state.lastResult?.isSpecial ?? false
+
+  // For sprints, hide the per-player result display once race is triggered
+  const showResultBox = hasResult && !isRolling && !(isSprint && raceTriggered)
 
   return (
     <div className="game-screen">
@@ -91,6 +129,18 @@ export function GameScreen() {
           <span className="turn-athlete">{athlete.name}</span>
         </div>
       </div>
+
+      {/* Race track for sprint events — shown above the main grid */}
+      {isSprint && (
+        <div className="race-track-container">
+          <RaceTrack
+            players={state.players}
+            eventId={event.id}
+            triggerRace={raceTriggered}
+            onRaceComplete={handleRaceComplete}
+          />
+        </div>
+      )}
 
       <div className="game-body">
         <div className="game-left">
@@ -113,8 +163,8 @@ export function GameScreen() {
             onRollComplete={handleRollComplete}
           />
 
-          {/* Event animations */}
-          {hasResult && !isRolling && !isSpecial && (
+          {/* Event animations (non-sprint) */}
+          {hasResult && !isRolling && !isSpecial && !isSprint && (
             <>
               {(event.type === 'field_throw' || event.type === 'field_jump') && (
                 <FieldAnimation
@@ -123,7 +173,7 @@ export function GameScreen() {
                   isSpecial={isSpecial}
                 />
               )}
-              {(event.type === 'sprint' || event.type === 'multi_segment') && (
+              {event.type === 'multi_segment' && (
                 <TrackAnimation
                   eventId={event.id}
                   result={state.lastResult?.numericValue ?? null}
@@ -145,13 +195,45 @@ export function GameScreen() {
             </>
           )}
 
-          {hasResult && !isRolling && (
+          {/* Per-roll result box (hidden during sprint race) */}
+          {showResultBox && (
             <div className={`result-display ${isSpecial ? 'special' : 'normal'}`}>
               <span className="result-label">Result</span>
               <span className="result-value">{lastResultDisplay}</span>
               {currentResult && currentResult.points > 0 && isEventDone && (
                 <span className="result-points">{currentResult.points} pts</span>
               )}
+            </div>
+          )}
+
+          {/* Sprint race results summary */}
+          {isSprint && raceComplete && (
+            <div className="race-results">
+              {[...state.players]
+                .map(p => ({
+                  player: p,
+                  result: p.eventResults.find(r => r.eventId === event.id),
+                }))
+                .sort((a, b) => {
+                  if (a.result?.bestResult == null) return 1
+                  if (b.result?.bestResult == null) return -1
+                  return a.result.bestResult - b.result.bestResult
+                })
+                .map((entry, i) => {
+                  const g = getAthleteGraphic(entry.player.athleteId)
+                  return (
+                  <div key={entry.player.id} className="race-result-row" style={{ borderLeftColor: g.color }}>
+                    <span className="race-place">{i + 1}</span>
+                    <span className="race-name">{entry.player.name}</span>
+                    <span className="race-time">
+                      {entry.result?.bestResultDisplay
+                        ? entry.result.bestResultDisplay + 's'
+                        : entry.result?.bestResultDisplay ?? 'DQ'}
+                    </span>
+                    <span className="race-pts">{entry.result?.points ?? 0} pts</span>
+                  </div>
+                  )
+                })}
             </div>
           )}
 
@@ -171,10 +253,22 @@ export function GameScreen() {
             </button>
           )}
         </div>
+      </div>
 
-        <div className="game-right">
-          <Scoresheet player={player} currentEventId={event.id} />
-        </div>
+      {/* All player scorecards — always visible */}
+      <div className="scorecards-row">
+        {state.players.map(p => {
+          const g = getAthleteGraphic(p.athleteId)
+          return (
+            <Scoresheet
+              key={p.id}
+              player={p}
+              currentEventId={event.id}
+              isActive={p.id === player.id}
+              accentColor={g.color}
+            />
+          )
+        })}
       </div>
     </div>
   )

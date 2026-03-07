@@ -5,12 +5,16 @@ import './Scoresheet.css'
 interface ScoresheetProps {
   player: PlayerState
   currentEventId: string
+  isActive?: boolean
+  accentColor?: string
 }
 
-export function Scoresheet({ player, currentEventId }: ScoresheetProps) {
+export function Scoresheet({ player, currentEventId, isActive, accentColor }: ScoresheetProps) {
   return (
-    <div className="scoresheet">
-      <div className="scoresheet-header">
+    <div className={`scoresheet ${isActive ? 'active' : ''}`}
+      style={isActive && accentColor ? { borderColor: accentColor } as React.CSSProperties : undefined}
+    >
+      <div className="scoresheet-header" style={isActive && accentColor ? { borderBottomColor: accentColor } : undefined}>
         <span className="player-name">{player.name}</span>
         <span className="total-points">{player.totalPoints} pts</span>
       </div>

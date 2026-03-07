@@ -1,68 +1,154 @@
 .chart-display {
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: 8px;
+  background: #1a1f2e;
+  border: 2px solid #2a3040;
+  border-radius: 4px;
   overflow: hidden;
+  font-family: 'Consolas', 'Courier New', monospace;
+}
+
+.chart-header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 4px 6px;
+  background: #222840;
+  border-bottom: 2px solid #2a3040;
+}
+
+.chart-event-number {
+  font-size: 0.6rem;
+  color: #6b7a99;
+  background: #181c28;
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-weight: 600;
+}
+
+.chart-event-name {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #c0cce0;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.chart-sp-cost {
+  font-size: 0.55rem;
+  color: #6b7a99;
 }
 
 .chart-table-wrapper {
-  max-height: 500px;
+  max-height: 520px;
   overflow-y: auto;
 }
 
 .chart-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.8rem;
+  font-size: 0.7rem;
+  line-height: 1.1;
+  table-layout: fixed;
 }
 
-.chart-table th {
+/* Column widths */
+.chart-table .col-dice { width: 28px; }
+.chart-table .col-safe,
+.chart-table .col-avg,
+.chart-table .col-allout { width: auto; }
+
+/* Header */
+.chart-table thead {
   position: sticky;
   top: 0;
-  background: var(--color-surface-alt);
-  padding: 0.5rem 0.6rem;
-  text-align: center;
-  font-weight: 600;
-  font-size: 0.75rem;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
   z-index: 1;
 }
 
-.chart-table td {
-  padding: 0.3rem 0.6rem;
+.chart-table th {
+  padding: 3px 2px;
   text-align: center;
-  border-bottom: 1px solid var(--color-border);
+  font-weight: 700;
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background: #1e2436;
+  border-bottom: 1px solid #2a3040;
 }
 
-.col-dice {
-  width: 50px;
+.chart-table th.col-dice {
+  color: #556;
+  font-size: 0.55rem;
+}
+
+.chart-table th.col-safe { color: #4ade80; }
+.chart-table th.col-avg { color: #60a5fa; }
+.chart-table th.col-allout { color: #f87171; }
+
+/* Body cells */
+.chart-table td {
+  padding: 2px 3px;
+  text-align: center;
+  border-bottom: 1px solid #1e2436;
+  font-size: 0.68rem;
+  white-space: nowrap;
+  color: #b0bcd0;
+}
+
+.chart-table td.col-dice {
   font-weight: 600;
-  color: var(--color-text-muted);
+  color: #556;
+  font-size: 0.62rem;
+  background: #161a26;
+  border-right: 1px solid #222840;
 }
 
-.col-safe { color: var(--color-safe); }
-th.col-safe { color: var(--color-safe); }
-th.col-avg { color: var(--color-avg); }
-th.col-allout { color: var(--color-allout); }
+.chart-table td.col-dice-right {
+  font-weight: 600;
+  color: #556;
+  font-size: 0.62rem;
+  background: #161a26;
+  border-left: 1px solid #222840;
+  width: 28px;
+}
 
+/* Alternating row stripe */
+.chart-table tbody tr:nth-child(even) td {
+  background: rgba(255, 255, 255, 0.015);
+}
+.chart-table tbody tr:nth-child(even) td.col-dice,
+.chart-table tbody tr:nth-child(even) td.col-dice-right {
+  background: #161a26;
+}
+
+/* 10s grouping - subtle border every 10 rows */
+.chart-table tbody tr.decade-start td {
+  border-top: 1px solid #2a3555;
+}
+
+/* Active row highlight */
+.chart-table tbody tr.active-row td {
+  background: rgba(59, 130, 246, 0.12);
+}
+.chart-table tbody tr.active-row td.col-dice,
+.chart-table tbody tr.active-row td.col-dice-right {
+  background: rgba(59, 130, 246, 0.2);
+  color: #80b0f0;
+}
+
+/* Cell types */
 .chart-cell {
-  transition: all 0.2s;
+  transition: background 0.15s, color 0.15s;
 }
 
 .chart-cell.highlighted {
-  background: var(--color-accent) !important;
-  color: white !important;
+  background: #3b82f6 !important;
+  color: #fff !important;
   font-weight: 700;
-  font-size: 0.9rem;
-  border-radius: 4px;
+  font-size: 0.75rem;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.3);
 }
 
-tr.active-row td {
-  background: rgba(59, 130, 246, 0.08);
-}
-
-.cell-injury { color: var(--color-danger); font-weight: 600; }
-.cell-fs { color: var(--color-warning); font-weight: 600; }
-.cell-ng { color: var(--color-text-muted); }
-.cell-foul { color: var(--color-text-muted); font-style: italic; }
+.cell-injury { color: #f87171 !important; font-weight: 700; }
+.cell-fs { color: #fbbf24 !important; font-weight: 600; }
+.cell-ng { color: #556 !important; }
+.cell-foul { color: #445 !important; font-style: italic; }
