@@ -1,6 +1,6 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useMemo } from 'react'
 import { useGameStore } from '../game/store'
-import { EVENTS } from '../data/events'
+import { EVENTS, POLE_VAULT_HEIGHTS, FATIGUE_THRESHOLD, generateHighJumpHeights } from '../data/events'
 import { DiceDisplay } from './DiceDisplay'
 import { ChartDisplay } from './ChartDisplay'
 import { EffortSelector } from './EffortSelector'
@@ -12,7 +12,7 @@ import { HeightAnimation } from './animations/HeightAnimation'
 import { RaceTrack } from './animations/RaceTrack'
 import { LongJumpPit } from './animations/LongJumpPit'
 import { ShotPutRing } from './animations/ShotPutRing'
-import { clearsHeight } from '../game/chartLookup'
+import { clearsHeight, parseFeetInches } from '../game/chartLookup'
 import { getAthleteGraphic } from '../data/athleteGraphics'
 import athleteData from '../data/athletes.json'
 import type { EffortType, AthleteData } from '../types'
@@ -28,7 +28,9 @@ export function GameScreen() {
   const [raceComplete, setRaceComplete] = useState(false)
   const [jumpTrigger, setJumpTrigger] = useState(0)
   const [throwTrigger, setThrowTrigger] = useState(0)
+  const [heightJumpTrigger, setHeightJumpTrigger] = useState(0)
   const [showScorecard, setShowScorecard] = useState(false)
+  const [heightAction, setHeightAction] = useState<'choosing' | 'attempting' | 'confirming-done'>('choosing')
 
   const event = EVENTS[state.currentEventIndex]
   const player = state.players[state.currentPlayerIndex]
@@ -40,6 +42,56 @@ export function GameScreen() {
   const isSprint = event?.type === 'sprint'
   const isLongJump = event?.id === 'long_jump'
   const isShotPut = event?.id === 'shot_put'
+  const isHeight = event?.type === 'height'
+
+  // Compute dynamic height list based on athletes in game
+  const heightList = useMemo(() => {
+    if (!event || event.type !== 'height') return []
+    if (event.id === 'pole_vault') return POLE_VAULT_HEIGHTS
+
+    // Find max possible HJ result across all players' charts
+    let maxInches = 87 // default 7'3"
+    for (const p of state.players) {
+      const a = athletes[p.athleteId]
+      if (!a?.events?.high_jump) continue
+      for (const cell of Object.values(a.events.high_jump)) {
+        for (const effort of ['safe', 'avg', 'allout'] as const) {
+          const val = cell[effort]
+          if (typeof val === 'string' && val.includes("'")) {
+            const inches = parseFeetInches(val)
+            if (inches !== null && inches > maxInches) maxInches = inches
+          }
+        }
+      }
+    }
+    return generateHighJumpHeights(maxInches)
+  }, [event, state.players])
+
+  // Compute max possible height per player for scorecard blackout
+  const playerMaxHeights = useMemo(() => {
+    if (!event || event.type !== 'height') return {}
+    const eventId = event.id
+    const result: Record<number, number> = {}
+    for (const p of state.players) {
+      const a = athletes[p.athleteId]
+      const chart = a?.events?.[eventId]
+      if (!chart) continue
+      let max = 0
+      for (const cell of Object.values(chart)) {
+        for (const effort of ['safe', 'avg', 'allout'] as const) {
+          const val = cell[effort]
+          if (typeof val === 'string' && val.includes("'")) {
+            const inches = parseFeetInches(val)
+            if (inches !== null && inches > max) max = inches
+          }
+        }
+      }
+      result[p.id] = max
+    }
+    return result
+  }, [event, state.players])
+
+  const currentBarHeight = isHeight ? heightList[state.currentHeightIndex] ?? null : null
 
   // Check if all players have rolled for this sprint event
   const allPlayersRolled = isSprint && state.players.every(p =>
@@ -60,6 +112,11 @@ export function GameScreen() {
     setRaceComplete(false)
   }, [state.currentEventIndex])
 
+  // Reset height action when player, height, or phase changes back to choosing
+  useEffect(() => {
+    setHeightAction('choosing')
+  }, [state.currentPlayerIndex, state.currentHeightIndex, state.phase])
+
   const handleEffortSelect = useCallback((effort: EffortType) => {
     setChosenEffort(effort)
     state.chooseEffort(effort)
@@ -69,11 +126,15 @@ export function GameScreen() {
 
   const handleRollComplete = useCallback(() => {
     setIsRolling(false)
-    const currentEventId = EVENTS[useGameStore.getState().currentEventIndex]?.id
+    const s = useGameStore.getState()
+    const currentEventId = EVENTS[s.currentEventIndex]?.id
+    const currentEventType = EVENTS[s.currentEventIndex]?.type
     if (currentEventId === 'long_jump') {
       setJumpTrigger(t => t + 1)
     } else if (currentEventId === 'shot_put') {
       setThrowTrigger(t => t + 1)
+    } else if (currentEventType === 'height') {
+      setHeightJumpTrigger(t => t + 1)
     }
   }, [])
 
@@ -98,6 +159,8 @@ export function GameScreen() {
     attemptDisplay = `Attempt ${state.currentAttempt + 1} of 3`
   } else if (event.type === 'multi_segment') {
     attemptDisplay = `Segment ${state.currentSegment + 1} of ${event.segments}`
+  } else if (isHeight && currentBarHeight) {
+    attemptDisplay = `Bar: ${currentBarHeight}`
   }
 
   // Determine All Out cost considering injury
@@ -113,17 +176,35 @@ export function GameScreen() {
   const showAdvance = hasResult && !isRolling && !sprintWaitingForRace && !sprintRaceInProgress
   const isFieldEvent = event.type === 'field_throw' || event.type === 'field_jump'
   const isLastPlayer = state.currentPlayerIndex >= state.players.length - 1
+  // For height events, check if all players are done
+  const allHeightPlayersDone = isHeight && state.players.every(p => {
+    const r = p.eventResults.find(er => er.eventId === event.id)
+    if (!r) return false
+    if (r.heightDone) return true
+    // Check 3 consecutive misses
+    let misses = 0
+    for (const hp of (r.heightProgression ?? [])) {
+      for (const a of hp.attempts) {
+        if (a === 'X') misses++
+        else if (a === 'O') misses = 0
+      }
+    }
+    return misses >= 3
+  })
+
   const isEventDone = (
     event.type === 'sprint' ||
     isFieldEvent && state.currentAttempt >= 2 && isLastPlayer ||
     event.type === 'multi_segment' && state.currentSegment >= (event.segments ?? 0) ||
+    allHeightPlayersDone ||
     state.phase === 'eventComplete'
   )
   const advanceLabel = isEventDone ? 'Next' : 'Continue'
 
   const lastResultDisplay = state.lastResult?.displayValue ?? ''
   const isSpecial = state.lastResult?.isSpecial ?? false
-  const showResultBox = hasResult && !isRolling && !(isSprint && raceTriggered)
+  // Don't show result box for height pass/done (no dice rolled)
+  const showResultBox = hasResult && !isRolling && !(isSprint && raceTriggered) && state.lastRoll !== null
 
   return (
     <div className="game-screen">
@@ -172,6 +253,24 @@ export function GameScreen() {
         </div>
       )}
 
+      {/* Height event (high jump / pole vault) */}
+      {isHeight && (
+        <div className="race-track-container">
+          <HeightAnimation
+            eventId={event.id}
+            players={state.players}
+            currentPlayerIndex={state.currentPlayerIndex}
+            currentHeightIndex={state.currentHeightIndex}
+            lastResultInches={state.lastResult?.numericValue ?? null}
+            cleared={state.lastResult?.numericValue != null && currentBarHeight
+              ? clearsHeight(state.lastResult.numericValue, currentBarHeight)
+              : null}
+            isSpecial={isSpecial}
+            jumpTrigger={heightJumpTrigger}
+          />
+        </div>
+      )}
+
       {/* Long jump pit */}
       {isLongJump && (
         <div className="race-track-container">
@@ -187,7 +286,7 @@ export function GameScreen() {
         </div>
       )}
 
-      <div className="game-body">
+      <div className={`game-body ${isHeight ? 'height-layout' : ''}`}>
         <div className="game-left">
           <ChartDisplay
             athlete={athlete}
@@ -198,6 +297,23 @@ export function GameScreen() {
         </div>
 
         <div className="game-center">
+          {isHeight && (() => {
+            const heightAttempts = currentResult?.heightProgression?.reduce(
+              (sum, h) => sum + h.attempts.filter(a => a === 'O' || a === 'X').length, 0
+            ) ?? 0
+            const fatigued = heightAttempts >= FATIGUE_THRESHOLD
+            return (
+              <>
+                <div className="height-player-badge" style={{ borderColor: getAthleteGraphic(player.athleteId).color }}>
+                  {player.name}
+                </div>
+                <div className={`height-fatigue ${fatigued ? 'active' : ''}`}>
+                  Attempts: {heightAttempts}
+                  {fatigued && <span className="fatigue-warn"> (+1 SP fatigue)</span>}
+                </div>
+              </>
+            )
+          })()}
           {attemptDisplay && (
             <div className="attempt-badge">{attemptDisplay}</div>
           )}
@@ -228,15 +344,7 @@ export function GameScreen() {
                   isSpecial={isSpecial}
                 />
               )}
-              {event.type === 'height' && state.lastResult?.numericValue != null && (
-                <HeightAnimation
-                  eventId={event.id}
-                  result={state.lastResult.numericValue}
-                  targetHeight={null}
-                  cleared={clearsHeight(state.lastResult.numericValue, currentResult?.heightProgression?.at(-1)?.height ?? "6' 0\"")}
-                  isSpecial={isSpecial}
-                />
-              )}
+              {/* Height animation is now always-visible above the grid */}
             </>
           )}
 
@@ -282,7 +390,56 @@ export function GameScreen() {
             </div>
           )}
 
-          {isChoosingEffort && (
+          {isChoosingEffort && !isHeight && (
+            <EffortSelector
+              onSelect={handleEffortSelect}
+              disabled={isRolling}
+              injuryInEffect={injuryActive}
+              staminaRemaining={stamina}
+              allOutCost={allOutCost}
+            />
+          )}
+
+          {/* Height event action buttons */}
+          {isChoosingEffort && isHeight && heightAction === 'choosing' && (
+            <div className="height-actions">
+              <button className="primary height-btn" onClick={() => setHeightAction('attempting')}>
+                Attempt {currentBarHeight}
+              </button>
+              <button className="height-btn height-pass" onClick={() => { state.passHeight(); }}>
+                Pass
+              </button>
+              <button className="height-btn height-done" onClick={() => setHeightAction('confirming-done')}>
+                Done Jumping
+              </button>
+            </div>
+          )}
+
+          {/* Height event: confirm done jumping */}
+          {isChoosingEffort && isHeight && heightAction === 'confirming-done' && (() => {
+            const bestHeight = currentResult?.bestResultDisplay || 'No height cleared'
+            const pts = currentResult?.points ?? 0
+            return (
+              <div className="height-confirm-done">
+                <div className="height-confirm-title">Stop Jumping?</div>
+                <div className="height-confirm-score">
+                  <span className="height-confirm-label">Best Height</span>
+                  <span className="height-confirm-value">{bestHeight}</span>
+                  <span className="height-confirm-pts">{pts} pts</span>
+                </div>
+                <div className="height-confirm-buttons">
+                  <button className="height-btn height-done" onClick={() => { state.doneJumping(); }}>
+                    Accept &amp; Stop
+                  </button>
+                  <button className="height-btn height-pass" onClick={() => setHeightAction('choosing')}>
+                    Go Back
+                  </button>
+                </div>
+              </div>
+            )
+          })()}
+
+          {isChoosingEffort && isHeight && heightAction === 'attempting' && (
             <EffortSelector
               onSelect={handleEffortSelect}
               disabled={isRolling}
@@ -304,6 +461,8 @@ export function GameScreen() {
             players={state.players}
             event={event}
             currentPlayerIndex={state.currentPlayerIndex}
+            heightList={heightList}
+            playerMaxHeights={playerMaxHeights}
           />
         </div>
       </div>

@@ -106,6 +106,7 @@ export interface EventResult {
   points: number;
   segments?: SegmentResult[];           // for 400m / 1500m
   heightProgression?: HeightAttempt[];  // for HJ / PV
+  heightDone?: boolean;                 // player chose to stop jumping
 }
 
 export interface AttemptResult {
@@ -129,7 +130,7 @@ export interface SegmentResult {
 
 export interface HeightAttempt {
   height: string;
-  attempts: ('O' | 'X' | '-')[];
+  attempts: ('O' | 'X' | 'P' | '-')[];
   cleared: boolean;
 }
 
@@ -162,6 +163,7 @@ export interface GameState {
   currentEventIndex: number;           // 0-9
   currentAttempt: number;              // 0-based
   currentSegment: number;              // for multi-segment events
+  currentHeightIndex: number;          // for height events (index into height list)
   lastRoll: DiceRoll | null;
   lastResult: ChartLookupResult | null;
 }

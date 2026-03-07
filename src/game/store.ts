@@ -4,9 +4,9 @@ import type {
   EffortType, EventResult,
   AttemptResult, InjuryEffect,
 } from '../types';
-import { EVENTS, STAMINA_PER_DAY, MAX_INJURY_POINTS, FATIGUE_THRESHOLD, MAX_FALSE_STARTS, MAX_CONSECUTIVE_FOULS } from '../data/events';
+import { EVENTS, STAMINA_PER_DAY, MAX_INJURY_POINTS, FATIGUE_THRESHOLD, MAX_FALSE_STARTS, MAX_CONSECUTIVE_FOULS, HIGH_JUMP_HEIGHTS, POLE_VAULT_HEIGHTS, generateHighJumpHeights } from '../data/events';
 import { rollDice } from './dice';
-import { lookupChart, isBetterResult } from './chartLookup';
+import { lookupChart, isBetterResult, clearsHeight, parseFeetInches } from './chartLookup';
 import { calculatePoints } from './scoring';
 import athleteData from '../data/athletes.json';
 
@@ -30,6 +30,7 @@ const initialState: GameState = {
   currentEventIndex: 0,
   currentAttempt: 0,
   currentSegment: 0,
+  currentHeightIndex: 0,
   lastRoll: null,
   lastResult: null,
 };
@@ -98,8 +99,60 @@ function getPlayerAthlete(player: PlayerState) {
 function countHeightAttempts(eventResult: EventResult | undefined): number {
   if (!eventResult?.heightProgression) return 0;
   return eventResult.heightProgression.reduce(
-    (sum, h) => sum + h.attempts.filter(a => a !== '-').length, 0
+    (sum, h) => sum + h.attempts.filter(a => a === 'O' || a === 'X').length, 0
   );
+}
+
+// Count consecutive misses (X) across heights — passes don't reset, clears do
+function countConsecutiveMisses(eventResult: EventResult | undefined): number {
+  if (!eventResult?.heightProgression) return 0;
+  let misses = 0;
+  // Walk all attempts in order across all heights
+  for (const hp of eventResult.heightProgression) {
+    for (const a of hp.attempts) {
+      if (a === 'X') misses++;
+      else if (a === 'O') misses = 0;
+      // 'P' and '-' don't affect miss count
+    }
+  }
+  return misses;
+}
+
+// Get the height list for an event, dynamically extended for the athletes in play
+function getHeightList(eventId: string, players?: PlayerState[]): string[] {
+  if (eventId === 'pole_vault') return POLE_VAULT_HEIGHTS;
+
+  if (!players || players.length === 0) return HIGH_JUMP_HEIGHTS;
+
+  // Find the max possible high jump result across all players' charts
+  let maxInches = 87; // default 7'3" = 87 inches
+  for (const p of players) {
+    const athlete = athletes[p.athleteId];
+    if (!athlete) continue;
+    const chart = athlete.events['high_jump'];
+    if (!chart) continue;
+    for (const diceKey of Object.keys(chart)) {
+      const cell = chart[diceKey];
+      for (const effort of ['safe', 'avg', 'allout'] as const) {
+        const val = cell[effort];
+        if (typeof val === 'string' && val.includes("'")) {
+          const inches = parseFeetInches(val);
+          if (inches !== null && inches > maxInches) maxInches = inches;
+        }
+      }
+    }
+  }
+
+  return generateHighJumpHeights(maxInches);
+}
+
+// Check if a player is done with height event (3 consecutive misses or marked done)
+function isPlayerDoneWithHeight(player: PlayerState, eventId: string): boolean {
+  const result = player.eventResults.find(r => r.eventId === eventId);
+  if (!result) return false;
+  if (result.heightDone) return true;
+  if (countConsecutiveMisses(result) >= 3) return true;
+  return false;
 }
 
 interface GameActions {
@@ -117,6 +170,7 @@ interface GameActions {
   // HJ/PV specific
   setStartingHeight: (height: string) => void;
   passHeight: () => void;
+  doneJumping: () => void;
 
   // Utility
   resetGame: () => void;
@@ -144,6 +198,7 @@ export const useGameStore = create<GameState & GameActions>((set, get) => ({
       currentEventIndex: startEventIndex ?? 0,
       currentAttempt: 0,
       currentSegment: 0,
+      currentHeightIndex: 0,
     }),
 
   canAffordEffort: (effort) => {
@@ -464,22 +519,64 @@ export const useGameStore = create<GameState & GameActions>((set, get) => ({
       }
 
     } else if (event.type === 'height') {
-      // HJ/PV handled separately — the result is a height that we compare to the attempted height
-      // For now, store the result; the UI will manage height progression
+      // HJ/PV: dice result is a height in inches, compare to current bar
+      const heights = getHeightList(event.id, state.players);
+      const currentHeight = heights[state.currentHeightIndex];
+      if (!currentHeight) return;
+
+      const cleared = clearsHeight(resolvedResult.numericValue ?? 0, currentHeight);
       const currentER = updatedPlayer.eventResults.find(r => r.eventId === event.id);
       const attempts = [...(currentER?.attempts || []), attemptResult];
-      const eventResult: EventResult = {
-        eventId: event.id,
-        attempts,
-        bestResult: currentER?.bestResult ?? null,
-        bestResultDisplay: currentER?.bestResultDisplay ?? '',
-        points: currentER?.points ?? 0,
-        heightProgression: currentER?.heightProgression || [],
-      };
-      updatedPlayer.eventResults = [
-        ...updatedPlayer.eventResults.filter(r => r.eventId !== event.id),
-        eventResult,
-      ];
+      const progression = [...(currentER?.heightProgression || [])];
+
+      // Find or create the entry for current height
+      let heightEntry = progression.find(h => h.height === currentHeight);
+      if (!heightEntry) {
+        heightEntry = { height: currentHeight, attempts: [], cleared: false };
+        progression.push(heightEntry);
+      }
+
+      if (cleared) {
+        heightEntry.attempts.push('O');
+        heightEntry.cleared = true;
+
+        // Score is based on the bar height (in inches), not the dice result
+        const barInches = parseFeetInches(currentHeight) ?? 0;
+        const bestPrev = currentER?.bestResult ?? 0;
+        const bestResult = Math.max(bestPrev, barInches);
+        const bestDisplay = bestResult === barInches ? currentHeight : (currentER?.bestResultDisplay ?? currentHeight);
+        const points = calculatePoints(event.id, bestResult);
+
+        const eventResult: EventResult = {
+          eventId: event.id,
+          attempts,
+          bestResult,
+          bestResultDisplay: bestDisplay,
+          points,
+          heightProgression: progression,
+        };
+        updatedPlayer.eventResults = [
+          ...updatedPlayer.eventResults.filter(r => r.eventId !== event.id),
+          eventResult,
+        ];
+        updatedPlayer.totalPoints = updatedPlayer.eventResults.reduce((sum, r) => sum + r.points, 0);
+      } else {
+        heightEntry.attempts.push('X');
+
+        const eventResult: EventResult = {
+          eventId: event.id,
+          attempts,
+          bestResult: currentER?.bestResult ?? null,
+          bestResultDisplay: currentER?.bestResultDisplay ?? '',
+          points: currentER?.points ?? 0,
+          heightProgression: progression,
+        };
+        updatedPlayer.eventResults = [
+          ...updatedPlayer.eventResults.filter(r => r.eventId !== event.id),
+          eventResult,
+        ];
+      }
+
       updatedPlayers[playerIndex] = updatedPlayer;
       set({ players: updatedPlayers, lastRoll: dice, lastResult: resolvedResult, phase: 'showingResult' });
     }
@@ -532,14 +629,102 @@ export const useGameStore = create<GameState & GameActions>((set, get) => ({
         // All 3 rounds done — fall through to next event
       }
 
+      // Height events: round-robin with multiple attempts per height
+      if (event.type === 'height') {
+        const heights = getHeightList(event.id, state.players);
+        const currentHeight = heights[state.currentHeightIndex];
+
+        // Check if current player needs more attempts at this height
+        // A player is done at this height if they: cleared, passed, or are eliminated
+        const currentPlayerResult = state.players[state.currentPlayerIndex].eventResults.find(r => r.eventId === event.id);
+        const currentHeightEntry = currentPlayerResult?.heightProgression?.find(h => h.height === currentHeight);
+        const clearedCurrent = currentHeightEntry?.cleared ?? false;
+        const passed = currentHeightEntry?.attempts.includes('P') ?? false;
+        const playerEliminated = isPlayerDoneWithHeight(state.players[state.currentPlayerIndex], event.id);
+
+        // No per-height attempt limit — only 3 consecutive misses (across all heights) eliminates
+        const playerDoneAtThisHeight = clearedCurrent || passed || playerEliminated;
+
+        if (!playerDoneAtThisHeight) {
+          // Same player, same height — they can attempt again, pass, or stop
+          set({ lastRoll: null, lastResult: null, phase: 'choosingEffort' });
+          return;
+        }
+
+        // Find next player who still needs to act at this height (wraps around)
+        const isPlayerDoneAtHeight = (playerIdx: number): boolean => {
+          if (isPlayerDoneWithHeight(state.players[playerIdx], event.id)) return true;
+          const pr = state.players[playerIdx].eventResults.find(r => r.eventId === event.id);
+          const he = pr?.heightProgression?.find(h => h.height === currentHeight);
+          if (he?.cleared) return true;
+          if (he?.attempts.includes('P')) return true;
+          return false;
+        };
+
+        const findNextPlayerForHeight = (startAfter: number): number => {
+          // Search forward from current player, then wrap around
+          for (let offset = 1; offset < state.players.length; offset++) {
+            const i = (startAfter + offset) % state.players.length;
+            if (!isPlayerDoneAtHeight(i)) return i;
+          }
+          return -1;
+        };
+
+        const nextPlayer = findNextPlayerForHeight(state.currentPlayerIndex);
+        if (nextPlayer !== -1) {
+          const np = state.players[nextPlayer];
+          const updates: Partial<GameState> = {
+            currentPlayerIndex: nextPlayer,
+            lastRoll: null,
+            lastResult: null,
+            phase: 'choosingEffort' as const,
+          };
+          if (np.injuryInEffect && event.order >= np.injuryInEffect.expiresAfterEventOrder) {
+            const up = [...state.players];
+            up[nextPlayer] = { ...np, injuryInEffect: null };
+            set({ ...updates, players: up });
+          } else {
+            set(updates);
+          }
+          return;
+        }
+
+        // All players done at this height — check if anyone is still active
+        const activePlayers = state.players.filter(p => !isPlayerDoneWithHeight(p, event.id));
+        if (activePlayers.length > 0) {
+          // Move bar up
+          const nextHeightIndex = state.currentHeightIndex + 1;
+          if (nextHeightIndex < heights.length) {
+            let firstActive = -1;
+            for (let i = 0; i < state.players.length; i++) {
+              if (!isPlayerDoneWithHeight(state.players[i], event.id)) {
+                firstActive = i;
+                break;
+              }
+            }
+            if (firstActive !== -1) {
+              set({
+                currentHeightIndex: nextHeightIndex,
+                currentPlayerIndex: firstActive,
+                lastRoll: null,
+                lastResult: null,
+                phase: 'choosingEffort',
+              });
+              return;
+            }
+          }
+        }
+        // All done or no more heights — fall through to next event
+      }
+
       // For multi-segment not yet complete
       if (event.type === 'multi_segment' && state.currentSegment < event.segments!) {
         set({ phase: 'choosingEffort' });
         return;
       }
 
-      // Non-field events: move to next player
-      if (!isFieldEvent) {
+      // Non-field, non-height events: move to next player
+      if (!isFieldEvent && event.type !== 'height') {
         const nextPlayerIndex = state.currentPlayerIndex + 1;
         if (nextPlayerIndex < state.players.length) {
           const nextPlayer = state.players[nextPlayerIndex];
@@ -608,6 +793,7 @@ export const useGameStore = create<GameState & GameActions>((set, get) => ({
           currentPlayerIndex: 0,
           currentAttempt: 0,
           currentSegment: 0,
+          currentHeightIndex: 0,
           lastRoll: null,
           lastResult: null,
           phase: 'dayBreak',
@@ -619,6 +805,7 @@ export const useGameStore = create<GameState & GameActions>((set, get) => ({
           currentPlayerIndex: 0,
           currentAttempt: 0,
           currentSegment: 0,
+          currentHeightIndex: 0,
           lastRoll: null,
           lastResult: null,
           phase: 'choosingEffort',
@@ -632,7 +819,69 @@ export const useGameStore = create<GameState & GameActions>((set, get) => ({
   },
 
   passHeight: () => {
-    // HJ/PV: pass on current height
+    const state = get();
+    const event = getCurrentEvent(state);
+    const player = state.players[state.currentPlayerIndex];
+    if (!event || !player || event.type !== 'height') return;
+
+    const heights = getHeightList(event.id, state.players);
+    const currentHeight = heights[state.currentHeightIndex];
+    if (!currentHeight) return;
+
+    const updatedPlayers = [...state.players];
+    const updatedPlayer = { ...player };
+    const currentER = updatedPlayer.eventResults.find(r => r.eventId === event.id);
+    const progression = [...(currentER?.heightProgression || [])];
+
+    // Find or create entry for current height and mark 'P'
+    let heightEntry = progression.find(h => h.height === currentHeight);
+    if (!heightEntry) {
+      heightEntry = { height: currentHeight, attempts: [], cleared: false };
+      progression.push(heightEntry);
+    }
+    heightEntry.attempts.push('P');
+
+    const eventResult: EventResult = {
+      eventId: event.id,
+      attempts: currentER?.attempts || [],
+      bestResult: currentER?.bestResult ?? null,
+      bestResultDisplay: currentER?.bestResultDisplay ?? '',
+      points: currentER?.points ?? 0,
+      heightProgression: progression,
+    };
+    updatedPlayer.eventResults = [
+      ...updatedPlayer.eventResults.filter(r => r.eventId !== event.id),
+      eventResult,
+    ];
+    updatedPlayers[state.currentPlayerIndex] = updatedPlayer;
+    set({ players: updatedPlayers, phase: 'showingResult', lastRoll: null, lastResult: null });
+  },
+
+  doneJumping: () => {
+    const state = get();
+    const event = getCurrentEvent(state);
+    const player = state.players[state.currentPlayerIndex];
+    if (!event || !player || event.type !== 'height') return;
+
+    const updatedPlayers = [...state.players];
+    const updatedPlayer = { ...player };
+    const currentER = updatedPlayer.eventResults.find(r => r.eventId === event.id);
+
+    const eventResult: EventResult = {
+      eventId: event.id,
+      attempts: currentER?.attempts || [],
+      bestResult: currentER?.bestResult ?? null,
+      bestResultDisplay: currentER?.bestResultDisplay ?? '',
+      points: currentER?.points ?? 0,
+      heightProgression: currentER?.heightProgression || [],
+      heightDone: true,
+    };
+    updatedPlayer.eventResults = [
+      ...updatedPlayer.eventResults.filter(r => r.eventId !== event.id),
+      eventResult,
+    ];
+    updatedPlayers[state.currentPlayerIndex] = updatedPlayer;
+    set({ players: updatedPlayers, phase: 'showingResult', lastRoll: null, lastResult: null });
   },
 
   resetGame: () => set(initialState),

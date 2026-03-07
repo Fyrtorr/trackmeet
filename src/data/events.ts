@@ -68,12 +68,27 @@ export const SCORING_PARAMS: Record<string, ScoringParams> = {
   '1500m':        { A: 0.03768,  B: 480,  C: 1.85, type: 'track', unit: 'seconds' },
 };
 
+// Base high jump heights: every 2" from 5'8" to 6'6", then every 1" upward
+// Use generateHighJumpHeights() for game play to extend based on athletes
 export const HIGH_JUMP_HEIGHTS = [
-  "7' 9\"", "7' 8\"", "7' 7\"", "7' 6\"", "7' 4\"", "7' 3\"",
-  "7' 2\"", "7' 1\"", "7' 0\"", "6' 11\"", "6' 9\"", "6' 8\"",
-  "6' 7\"", "6' 6\"", "6' 5\"", "6' 3\"", "6' 2\"", "6' 1\"",
-  "6' 0\"", "5' 11\"", "5' 10\"", "5' 8\"", "5' 7\"", "5' 6\"",
+  "5' 8\"", "5' 10\"", "6' 0\"", "6' 2\"", "6' 4\"", "6' 6\"",
+  "6' 7\"", "6' 8\"", "6' 9\"", "6' 10\"", "6' 11\"",
+  "7' 0\"", "7' 1\"", "7' 2\"", "7' 3\"",
 ];
+
+// Generate high jump heights dynamically, extending up to maxInches
+export function generateHighJumpHeights(maxInches: number): string[] {
+  const heights: string[] = [];
+  // Every 2" from 5'8" (68") to 6'6" (78")
+  for (let i = 68; i <= 78; i += 2) {
+    heights.push(`${Math.floor(i / 12)}' ${i % 12}"`);
+  }
+  // Every 1" from 6'7" (79") upward
+  for (let i = 79; i <= maxInches; i++) {
+    heights.push(`${Math.floor(i / 12)}' ${i % 12}"`);
+  }
+  return heights;
+}
 
 export const POLE_VAULT_HEIGHTS = [
   "18' 8\"", "18' 4\"", "18' 0\"", "17' 8\"", "17' 4\"", "17' 0\"",

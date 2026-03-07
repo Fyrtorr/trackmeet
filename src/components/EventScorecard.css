@@ -139,26 +139,134 @@
   font-family: 'Consolas', monospace;
 }
 
-/* ── Height progression ── */
-.esc-heights {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
+/* ── Height event spreadsheet table ── */
+.esc-height-card {
+  overflow: visible;
 }
 
-.esc-height-row {
+.esc-height-table-wrap {
+  overflow: visible;
+}
+
+.esc-height-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.6rem;
+  font-family: 'Consolas', monospace;
+}
+
+.esc-height-table thead {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+
+.esc-height-table th {
+  padding: 0.35rem 0.25rem;
+  background: var(--color-surface-alt);
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-align: center;
+  border-bottom: 2px solid var(--color-border);
+  letter-spacing: 0.03em;
+}
+
+.esc-ht-player-col.active {
+  color: var(--color-accent);
+  border-bottom-width: 2px;
+}
+
+.esc-ht-height-col {
+  text-align: left;
+  padding-left: 0.3rem;
+  min-width: 36px;
+}
+
+.esc-ht-height {
+  padding: 0.25rem 0.4rem;
+  font-weight: 600;
+  font-size: 0.75rem;
+  white-space: nowrap;
+  border-right: 1px solid var(--color-border);
+  background: var(--color-surface);
+}
+
+.esc-ht-box {
+  width: 32px;
+  height: 32px;
+  text-align: center;
+  vertical-align: middle;
+  font-weight: 700;
+  font-size: 0.8rem;
+  border: 1px solid var(--color-border);
+  padding: 0;
+}
+
+.esc-ht-box.cleared {
+  color: #22c55e;
+  background: rgba(34, 197, 94, 0.08);
+}
+
+.esc-ht-box.missed {
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.06);
+}
+
+.esc-ht-box.passed {
+  color: var(--color-text-muted);
+}
+
+.esc-ht-box.skip {
+  color: var(--color-text-muted);
+  opacity: 0.4;
+}
+
+.esc-ht-box.blocked {
+  background: #1a1a2e;
+  border-color: #2a2a3e;
+}
+
+/* Status row below table */
+.esc-height-status {
   display: flex;
-  justify-content: space-between;
+  flex-direction: column;
+  border-top: 1px solid var(--color-border);
+}
+
+.esc-ht-status-item {
+  display: flex;
+  align-items: baseline;
+  gap: 0.3rem;
+  padding: 0.25rem 0.4rem;
+  border-left: 3px solid transparent;
+  font-size: 0.55rem;
+  opacity: 0.6;
+}
+
+.esc-ht-status-item.active {
+  opacity: 1;
+}
+
+.esc-ht-status-name {
+  font-weight: 700;
   font-size: 0.6rem;
 }
 
-.esc-height-val {
+.esc-ht-status-pb {
+  font-size: 0.55rem;
+  color: var(--color-text-muted);
   font-weight: 600;
 }
 
-.esc-height-attempts {
-  font-family: 'Consolas', monospace;
-  letter-spacing: 0.15em;
+.esc-ht-status-best {
+  color: var(--color-accent);
+  font-weight: 600;
+}
+
+.esc-ht-status-sp {
+  color: var(--color-text-muted);
+  margin-left: auto;
+  font-weight: 600;
 }
 
 /* ── Status bar ── */
