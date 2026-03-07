@@ -1,0 +1,61 @@
+.daybreak-screen {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.daybreak-content {
+  text-align: center;
+  max-width: 400px;
+  padding: 2rem;
+}
+
+.daybreak-content h1 {
+  font-size: 2rem;
+  font-weight: 800;
+  margin-bottom: 0.25rem;
+}
+
+.daybreak-subtitle {
+  color: var(--color-text-muted);
+  margin-bottom: 1.5rem;
+}
+
+.standings-list {
+  margin-bottom: 1.5rem;
+}
+
+.standing-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.6rem 1rem;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  margin-bottom: 0.5rem;
+}
+
+.standing-pos {
+  font-weight: 700;
+  color: var(--color-text-muted);
+  width: 24px;
+}
+
+.standing-name {
+  flex: 1;
+  text-align: left;
+  font-weight: 600;
+}
+
+.standing-points {
+  font-weight: 700;
+  color: var(--color-accent);
+}
+
+.daybreak-note {
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+  margin-bottom: 1.5rem;
+}

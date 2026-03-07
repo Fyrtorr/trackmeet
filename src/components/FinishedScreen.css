@@ -1,0 +1,120 @@
+.finished-screen {
+  min-height: 100vh;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 2rem;
+}
+
+.finished-content {
+  text-align: center;
+  max-width: 800px;
+  width: 100%;
+}
+
+.finished-content h1 {
+  font-size: 2.2rem;
+  font-weight: 800;
+  margin-bottom: 1.5rem;
+  background: linear-gradient(135deg, var(--color-gold), var(--color-accent));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.podium {
+  display: flex;
+  justify-content: center;
+  gap: 1rem;
+  margin-bottom: 2rem;
+}
+
+.podium-entry {
+  background: var(--color-surface);
+  border: 2px solid var(--color-border);
+  border-radius: 10px;
+  padding: 1.25rem 1.5rem;
+  min-width: 140px;
+}
+
+.podium-entry.gold { border-color: var(--color-gold); }
+.podium-entry.silver { border-color: var(--color-silver); }
+.podium-entry.bronze { border-color: var(--color-bronze); }
+
+.medal-icon {
+  font-size: 2rem;
+  margin-bottom: 0.5rem;
+}
+
+.podium-name {
+  font-weight: 700;
+  font-size: 1rem;
+}
+
+.podium-points {
+  color: var(--color-accent);
+  font-weight: 700;
+  font-size: 1.1rem;
+}
+
+/* Full results */
+.full-results {
+  margin-bottom: 2rem;
+}
+
+.full-results h2 {
+  font-size: 1rem;
+  margin-bottom: 0.75rem;
+  color: var(--color-text-muted);
+}
+
+.results-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+  background: var(--color-surface);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.results-table th {
+  padding: 0.5rem;
+  background: var(--color-surface-alt);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.results-table td {
+  padding: 0.35rem 0.5rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.event-label {
+  text-align: left;
+  font-weight: 500;
+}
+
+.result-cell {
+  text-align: right;
+  color: var(--color-text-muted);
+}
+
+.points-cell {
+  text-align: right;
+  font-weight: 600;
+  color: var(--color-accent);
+  padding-right: 1rem !important;
+}
+
+.total-row td {
+  font-weight: 700;
+  font-size: 0.9rem;
+  border-top: 2px solid var(--color-border);
+  padding-top: 0.5rem;
+}
+
+.total-cell {
+  color: var(--color-accent);
+  font-size: 1rem;
+}

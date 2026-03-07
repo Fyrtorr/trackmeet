@@ -1,0 +1,68 @@
+.chart-display {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.chart-table-wrapper {
+  max-height: 500px;
+  overflow-y: auto;
+}
+
+.chart-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+}
+
+.chart-table th {
+  position: sticky;
+  top: 0;
+  background: var(--color-surface-alt);
+  padding: 0.5rem 0.6rem;
+  text-align: center;
+  font-weight: 600;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  z-index: 1;
+}
+
+.chart-table td {
+  padding: 0.3rem 0.6rem;
+  text-align: center;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.col-dice {
+  width: 50px;
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+
+.col-safe { color: var(--color-safe); }
+th.col-safe { color: var(--color-safe); }
+th.col-avg { color: var(--color-avg); }
+th.col-allout { color: var(--color-allout); }
+
+.chart-cell {
+  transition: all 0.2s;
+}
+
+.chart-cell.highlighted {
+  background: var(--color-accent) !important;
+  color: white !important;
+  font-weight: 700;
+  font-size: 0.9rem;
+  border-radius: 4px;
+}
+
+tr.active-row td {
+  background: rgba(59, 130, 246, 0.08);
+}
+
+.cell-injury { color: var(--color-danger); font-weight: 600; }
+.cell-fs { color: var(--color-warning); font-weight: 600; }
+.cell-ng { color: var(--color-text-muted); }
+.cell-foul { color: var(--color-text-muted); font-style: italic; }

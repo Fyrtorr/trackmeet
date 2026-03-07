@@ -1,0 +1,84 @@
+.effort-selector {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.effort-label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--color-text-muted);
+}
+
+.effort-buttons {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.effort-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0.6rem 1.2rem;
+  border-radius: 8px;
+  min-width: 90px;
+  transition: all 0.15s;
+}
+
+.effort-btn .effort-name {
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.effort-btn .effort-cost {
+  font-size: 0.65rem;
+  opacity: 0.7;
+  margin-top: 0.15rem;
+}
+
+.effort-safe {
+  border-color: var(--color-safe);
+  color: var(--color-safe);
+}
+.effort-safe:hover:not(:disabled) {
+  background: rgba(34, 197, 94, 0.15);
+  border-color: var(--color-safe);
+}
+
+.effort-avg {
+  border-color: var(--color-avg);
+  color: var(--color-avg);
+}
+.effort-avg:hover:not(:disabled) {
+  background: rgba(59, 130, 246, 0.15);
+  border-color: var(--color-avg);
+}
+
+.effort-allout {
+  border-color: var(--color-allout);
+  color: var(--color-allout);
+}
+.effort-allout:hover:not(:disabled) {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: var(--color-allout);
+}
+
+.stamina-display {
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.injury-badge {
+  background: var(--color-danger);
+  color: white;
+  font-size: 0.6rem;
+  font-weight: 700;
+  padding: 0.15rem 0.4rem;
+  border-radius: 4px;
+  letter-spacing: 0.05em;
+}

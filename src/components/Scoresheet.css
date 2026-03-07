@@ -1,0 +1,110 @@
+.scoresheet {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.scoresheet-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  background: var(--color-surface-alt);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.scoresheet-header .player-name {
+  font-weight: 700;
+  font-size: 0.95rem;
+}
+
+.scoresheet-header .total-points {
+  font-weight: 700;
+  font-size: 1.1rem;
+  color: var(--color-accent);
+}
+
+.scoresheet-events {
+  padding: 0.25rem 0;
+}
+
+.event-row {
+  display: grid;
+  grid-template-columns: 24px 1fr auto auto;
+  gap: 0.5rem;
+  padding: 0.3rem 1rem;
+  font-size: 0.8rem;
+  align-items: center;
+  border-left: 3px solid transparent;
+}
+
+.event-row.current {
+  background: rgba(59, 130, 246, 0.08);
+  border-left-color: var(--color-accent);
+}
+
+.event-row.completed .event-name {
+  color: var(--color-text-muted);
+}
+
+.event-order {
+  color: var(--color-text-muted);
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+
+.event-result {
+  font-weight: 600;
+  font-size: 0.75rem;
+  text-align: right;
+  min-width: 60px;
+}
+
+.event-points {
+  color: var(--color-accent);
+  font-weight: 600;
+  font-size: 0.75rem;
+  text-align: right;
+  min-width: 36px;
+}
+
+.day-divider {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--color-text-muted);
+  padding: 0.3rem 1rem 0.1rem;
+  border-top: 1px solid var(--color-border);
+  margin-top: 0.25rem;
+}
+
+.scoresheet-status {
+  display: flex;
+  gap: 1rem;
+  padding: 0.6rem 1rem;
+  border-top: 1px solid var(--color-border);
+}
+
+.status-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 1;
+}
+
+.status-label {
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-muted);
+}
+
+.status-value {
+  font-weight: 700;
+  font-size: 0.95rem;
+}
+
+.status-value.danger {
+  color: var(--color-danger);
+}

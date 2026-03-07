@@ -1,0 +1,84 @@
+.dice-display {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.dice-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.die {
+  width: 56px;
+  height: 56px;
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 1.4rem;
+  position: relative;
+  transition: transform 0.1s;
+}
+
+.die-black {
+  background: var(--color-dice-black);
+  border: 2px solid #444;
+  color: white;
+}
+
+.die-white {
+  background: var(--color-dice-white);
+  border: 2px solid #ccc;
+  color: #1a1a2e;
+}
+
+.die-yellow {
+  background: #fef3c7;
+  border: 2px solid #d4a843;
+}
+
+.die-value {
+  line-height: 1;
+}
+
+.die-label {
+  font-size: 0.55rem;
+  font-weight: 400;
+  opacity: 0.6;
+  position: absolute;
+  bottom: 3px;
+}
+
+.die.tumbling {
+  animation: tumble 0.08s ease-in-out infinite alternate;
+}
+
+@keyframes tumble {
+  0% { transform: rotate(-8deg) scale(0.95); }
+  100% { transform: rotate(8deg) scale(1.05); }
+}
+
+.dice-op {
+  color: var(--color-text-muted);
+  font-size: 1.1rem;
+  font-weight: 300;
+}
+
+.dice-total {
+  font-size: 2rem;
+  font-weight: 800;
+  color: var(--color-text-muted);
+  transition: all 0.3s;
+  min-width: 3ch;
+  text-align: center;
+}
+
+.dice-total.revealed {
+  color: var(--color-accent);
+  transform: scale(1.1);
+}
