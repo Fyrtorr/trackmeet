@@ -39,6 +39,32 @@
   color: var(--color-text-muted);
 }
 
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.scorecard-btn {
+  font-size: 0.7rem;
+  padding: 0.35rem 0.75rem;
+  background: var(--color-surface-alt);
+  border: 1px solid var(--color-border);
+  border-radius: 5px;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  transition: background 0.15s, color 0.15s;
+}
+
+.scorecard-btn:hover {
+  background: var(--color-accent);
+  color: white;
+  border-color: var(--color-accent);
+}
+
 .player-turn {
   text-align: right;
   display: flex;
@@ -62,17 +88,18 @@
   color: var(--color-text-muted);
 }
 
-/* Race track container — spans full width */
+/* Race track / field container */
 .race-track-container {
   padding: 0.75rem 1.5rem 0;
 }
 
-/* Game body layout — chart left, controls center */
+/* Game body layout — chart | controls | event scorecard */
 .game-body {
   display: grid;
-  grid-template-columns: 240px 1fr;
+  grid-template-columns: 240px 1fr 240px;
   gap: 1rem;
-  padding: 0.75rem 1.5rem;
+  padding: 0.75rem 1.5rem 1rem;
+  flex: 1;
   align-items: start;
 }
 
@@ -88,14 +115,8 @@
   padding-top: 0.5rem;
 }
 
-/* Scorecards row — all players side by side at bottom */
-.scorecards-row {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 0.75rem;
-  padding: 0.5rem 1.5rem 1rem;
-  border-top: 1px solid var(--color-border);
-  background: var(--color-bg);
+.game-right {
+  min-width: 0;
 }
 
 /* Attempt badge */

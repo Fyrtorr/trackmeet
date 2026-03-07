@@ -4,11 +4,13 @@ import { EVENTS } from '../data/events'
 import { DiceDisplay } from './DiceDisplay'
 import { ChartDisplay } from './ChartDisplay'
 import { EffortSelector } from './EffortSelector'
-import { Scoresheet } from './Scoresheet'
+import { EventScorecard } from './EventScorecard'
+import { ScorecardOverlay } from './ScorecardOverlay'
 import { FieldAnimation } from './animations/FieldAnimation'
 import { TrackAnimation } from './animations/TrackAnimation'
 import { HeightAnimation } from './animations/HeightAnimation'
 import { RaceTrack } from './animations/RaceTrack'
+import { LongJumpPit } from './animations/LongJumpPit'
 import { clearsHeight } from '../game/chartLookup'
 import { getAthleteGraphic } from '../data/athleteGraphics'
 import athleteData from '../data/athletes.json'
@@ -23,6 +25,8 @@ export function GameScreen() {
   const [chosenEffort, setChosenEffort] = useState<EffortType | null>(null)
   const [raceTriggered, setRaceTriggered] = useState(false)
   const [raceComplete, setRaceComplete] = useState(false)
+  const [jumpTrigger, setJumpTrigger] = useState(0)
+  const [showScorecard, setShowScorecard] = useState(false)
 
   const event = EVENTS[state.currentEventIndex]
   const player = state.players[state.currentPlayerIndex]
@@ -32,6 +36,7 @@ export function GameScreen() {
   const injuryActive = player?.injuryInEffect !== null
 
   const isSprint = event?.type === 'sprint'
+  const isLongJump = event?.id === 'long_jump'
 
   // Check if all players have rolled for this sprint event
   const allPlayersRolled = isSprint && state.players.every(p =>
@@ -41,7 +46,6 @@ export function GameScreen() {
   // Detect when last player's roll animation finishes → trigger race
   useEffect(() => {
     if (allPlayersRolled && !isRolling && !raceTriggered) {
-      // Small delay so the player sees their result briefly
       const timer = setTimeout(() => setRaceTriggered(true), 600)
       return () => clearTimeout(timer)
     }
@@ -62,6 +66,9 @@ export function GameScreen() {
 
   const handleRollComplete = useCallback(() => {
     setIsRolling(false)
+    if (EVENTS[useGameStore.getState().currentEventIndex]?.id === 'long_jump') {
+      setJumpTrigger(t => t + 1)
+    }
   }, [])
 
   const handleAdvance = useCallback(() => {
@@ -93,13 +100,11 @@ export function GameScreen() {
     allOutCost = event.id === '1500m' ? 6 : 2
   }
 
-  // For sprint events: hide normal advance until race is done
+  // Sprint flow control
   const sprintRaceInProgress = isSprint && raceTriggered && !raceComplete
   const sprintWaitingForRace = isSprint && allPlayersRolled && !raceComplete
 
-  // Check if we should show advance button
   const showAdvance = hasResult && !isRolling && !sprintWaitingForRace && !sprintRaceInProgress
-  // For sprints after race, always show "Next" to go to next event
   const isEventDone = (
     event.type === 'sprint' ||
     (event.type === 'field_throw' || event.type === 'field_jump') && state.currentAttempt >= 2 ||
@@ -108,11 +113,8 @@ export function GameScreen() {
   )
   const advanceLabel = isEventDone ? 'Next' : 'Continue'
 
-  // Result display
   const lastResultDisplay = state.lastResult?.displayValue ?? ''
   const isSpecial = state.lastResult?.isSpecial ?? false
-
-  // For sprints, hide the per-player result display once race is triggered
   const showResultBox = hasResult && !isRolling && !(isSprint && raceTriggered)
 
   return (
@@ -123,14 +125,19 @@ export function GameScreen() {
           <h2 className="event-name">{event.name}</h2>
           <span className="event-number">Event {event.order} of 10</span>
         </div>
-        <div className="player-turn">
-          <span className="turn-label">Current Player</span>
-          <span className="turn-name">{player.name}</span>
-          <span className="turn-athlete">{athlete.name}</span>
+        <div className="header-right">
+          <button className="scorecard-btn" onClick={() => setShowScorecard(true)}>
+            Scorecard
+          </button>
+          <div className="player-turn">
+            <span className="turn-label">Current Player</span>
+            <span className="turn-name">{player.name}</span>
+            <span className="turn-athlete">{athlete.name}</span>
+          </div>
         </div>
       </div>
 
-      {/* Race track for sprint events — shown above the main grid */}
+      {/* Race track for sprint events */}
       {isSprint && (
         <div className="race-track-container">
           <RaceTrack
@@ -138,6 +145,21 @@ export function GameScreen() {
             eventId={event.id}
             triggerRace={raceTriggered}
             onRaceComplete={handleRaceComplete}
+          />
+        </div>
+      )}
+
+      {/* Long jump pit */}
+      {isLongJump && (
+        <div className="race-track-container">
+          <LongJumpPit
+            players={state.players}
+            currentPlayerIndex={state.currentPlayerIndex}
+            eventId={event.id}
+            lastResult={state.lastResult?.numericValue ?? null}
+            lastResultDisplay={state.lastResult?.displayValue ?? ''}
+            isSpecial={state.lastResult?.isSpecial ?? false}
+            jumpTrigger={jumpTrigger}
           />
         </div>
       )}
@@ -163,8 +185,8 @@ export function GameScreen() {
             onRollComplete={handleRollComplete}
           />
 
-          {/* Event animations (non-sprint) */}
-          {hasResult && !isRolling && !isSpecial && !isSprint && (
+          {/* Event animations (generic fallback) */}
+          {hasResult && !isRolling && !isSpecial && !isSprint && !isLongJump && (
             <>
               {(event.type === 'field_throw' || event.type === 'field_jump') && (
                 <FieldAnimation
@@ -195,7 +217,7 @@ export function GameScreen() {
             </>
           )}
 
-          {/* Per-roll result box (hidden during sprint race) */}
+          {/* Per-roll result box */}
           {showResultBox && (
             <div className={`result-display ${isSpecial ? 'special' : 'normal'}`}>
               <span className="result-label">Result</span>
@@ -253,23 +275,24 @@ export function GameScreen() {
             </button>
           )}
         </div>
+
+        <div className="game-right">
+          <EventScorecard
+            players={state.players}
+            event={event}
+            currentPlayerIndex={state.currentPlayerIndex}
+          />
+        </div>
       </div>
 
-      {/* All player scorecards — always visible */}
-      <div className="scorecards-row">
-        {state.players.map(p => {
-          const g = getAthleteGraphic(p.athleteId)
-          return (
-            <Scoresheet
-              key={p.id}
-              player={p}
-              currentEventId={event.id}
-              isActive={p.id === player.id}
-              accentColor={g.color}
-            />
-          )
-        })}
-      </div>
+      {/* Scorecard overlay */}
+      {showScorecard && (
+        <ScorecardOverlay
+          players={state.players}
+          currentEventId={event.id}
+          onClose={() => setShowScorecard(false)}
+        />
+      )}
     </div>
   )
 }

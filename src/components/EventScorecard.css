@@ -1,0 +1,180 @@
+.event-scorecard {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.esc-header {
+  padding: 0.4rem 0.6rem;
+  background: var(--color-surface-alt);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.esc-title {
+  font-weight: 700;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.esc-players {
+  display: flex;
+  flex-direction: column;
+}
+
+.esc-player {
+  padding: 0.5rem 0.6rem;
+  border-bottom: 1px solid var(--color-border);
+  border-left: 3px solid transparent;
+  opacity: 0.6;
+  transition: opacity 0.2s;
+}
+
+.esc-player:last-child {
+  border-bottom: none;
+}
+
+.esc-player.active {
+  opacity: 1;
+  background: rgba(59, 130, 246, 0.04);
+}
+
+.esc-player-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 0.3rem;
+}
+
+.esc-player-name {
+  font-weight: 700;
+  font-size: 0.75rem;
+}
+
+.esc-player-best {
+  font-weight: 600;
+  font-size: 0.7rem;
+  color: var(--color-accent);
+}
+
+.esc-pts {
+  font-size: 0.6rem;
+  opacity: 0.8;
+}
+
+/* ── Field event attempts ── */
+.esc-attempts {
+  display: flex;
+  gap: 4px;
+}
+
+.esc-attempt {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0.2rem 0.15rem;
+  background: var(--color-surface-alt);
+  border-radius: 4px;
+  border: 1px solid var(--color-border);
+}
+
+.esc-attempt.best {
+  border-color: var(--color-accent);
+  background: rgba(59, 130, 246, 0.08);
+}
+
+.esc-attempt-num {
+  font-size: 0.5rem;
+  color: var(--color-text-muted);
+  font-weight: 600;
+}
+
+.esc-attempt-val {
+  font-size: 0.65rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.esc-attempt.pending .esc-attempt-val {
+  color: var(--color-text-muted);
+}
+
+/* ── Multi-segment ── */
+.esc-segments {
+  display: flex;
+  gap: 3px;
+}
+
+.esc-segment {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0.15rem;
+  background: var(--color-surface-alt);
+  border-radius: 3px;
+  font-size: 0.6rem;
+}
+
+.esc-seg-num {
+  font-size: 0.45rem;
+  color: var(--color-text-muted);
+}
+
+.esc-seg-val {
+  font-weight: 600;
+  font-size: 0.6rem;
+}
+
+.esc-segment.pending .esc-seg-val {
+  color: var(--color-text-muted);
+}
+
+/* ── Sprint time ── */
+.esc-sprint-time {
+  font-size: 0.7rem;
+  font-weight: 600;
+  font-family: 'Consolas', monospace;
+}
+
+/* ── Height progression ── */
+.esc-heights {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.esc-height-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.6rem;
+}
+
+.esc-height-val {
+  font-weight: 600;
+}
+
+.esc-height-attempts {
+  font-family: 'Consolas', monospace;
+  letter-spacing: 0.15em;
+}
+
+/* ── Status bar ── */
+.esc-player-status {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.3rem;
+  font-size: 0.55rem;
+  color: var(--color-text-muted);
+}
+
+.esc-stamina {
+  font-weight: 600;
+}
+
+.esc-injury {
+  color: var(--color-danger);
+  font-weight: 600;
+}
