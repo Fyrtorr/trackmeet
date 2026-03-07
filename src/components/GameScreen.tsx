@@ -5,6 +5,10 @@ import { DiceDisplay } from './DiceDisplay'
 import { ChartDisplay } from './ChartDisplay'
 import { EffortSelector } from './EffortSelector'
 import { Scoresheet } from './Scoresheet'
+import { FieldAnimation } from './animations/FieldAnimation'
+import { TrackAnimation } from './animations/TrackAnimation'
+import { HeightAnimation } from './animations/HeightAnimation'
+import { clearsHeight } from '../game/chartLookup'
 import athleteData from '../data/athletes.json'
 import type { EffortType, AthleteData } from '../types'
 import './GameScreen.css'
@@ -108,6 +112,38 @@ export function GameScreen() {
             rolling={isRolling}
             onRollComplete={handleRollComplete}
           />
+
+          {/* Event animations */}
+          {hasResult && !isRolling && !isSpecial && (
+            <>
+              {(event.type === 'field_throw' || event.type === 'field_jump') && (
+                <FieldAnimation
+                  eventId={event.id}
+                  result={state.lastResult?.numericValue ?? null}
+                  isSpecial={isSpecial}
+                />
+              )}
+              {(event.type === 'sprint' || event.type === 'multi_segment') && (
+                <TrackAnimation
+                  eventId={event.id}
+                  result={state.lastResult?.numericValue ?? null}
+                  totalTime={currentResult?.segments?.reduce((s, seg) => s + seg.time, 0)}
+                  totalSegments={event.segments}
+                  currentSegment={state.currentSegment}
+                  isSpecial={isSpecial}
+                />
+              )}
+              {event.type === 'height' && state.lastResult?.numericValue != null && (
+                <HeightAnimation
+                  eventId={event.id}
+                  result={state.lastResult.numericValue}
+                  targetHeight={null}
+                  cleared={clearsHeight(state.lastResult.numericValue, currentResult?.heightProgression?.at(-1)?.height ?? "6' 0\"")}
+                  isSpecial={isSpecial}
+                />
+              )}
+            </>
+          )}
 
           {hasResult && !isRolling && (
             <div className={`result-display ${isSpecial ? 'special' : 'normal'}`}>

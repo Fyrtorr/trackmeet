@@ -1,0 +1,129 @@
+.track-animation {
+  width: 100%;
+  padding: 0.5rem 0;
+}
+
+.track-surface {
+  position: relative;
+  height: 60px;
+  background: #c4522a;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+/* Lane markings */
+.track-lane {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: rgba(255, 255, 255, 0.15);
+  transform: translateY(-50%);
+}
+
+/* Start and finish lines */
+.track-start-line {
+  position: absolute;
+  left: 5%;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: white;
+  opacity: 0.6;
+}
+
+.track-finish-line {
+  position: absolute;
+  right: 3%;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: repeating-linear-gradient(
+    to bottom,
+    white 0px, white 4px,
+    #222 4px, #222 8px
+  );
+  opacity: 0.8;
+}
+
+/* Hurdles */
+.track-hurdle {
+  position: absolute;
+  top: 30%;
+  width: 2px;
+  height: 40%;
+  background: #f5c542;
+  opacity: 0.7;
+  border-radius: 1px;
+}
+
+/* Runner */
+.track-runner {
+  position: absolute;
+  top: 50%;
+  left: 5%;
+  font-size: 1.4rem;
+  transform: translate(-50%, -55%);
+  z-index: 2;
+  filter: drop-shadow(0 1px 2px rgba(0,0,0,0.3));
+}
+
+.track-runner.running {
+  animation: runner-move var(--anim-duration) ease-out forwards;
+}
+
+.track-runner.finished {
+  left: var(--finish-x);
+  transform: translate(-50%, -55%);
+}
+
+@keyframes runner-move {
+  0% {
+    left: 5%;
+  }
+  100% {
+    left: var(--finish-x);
+  }
+}
+
+/* Time display */
+.track-time {
+  position: absolute;
+  top: 4px;
+  transform: translateX(-50%);
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: white;
+  background: rgba(0, 0, 0, 0.6);
+  padding: 2px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+  animation: fade-in-track 0.3s ease-out;
+  z-index: 3;
+}
+
+@keyframes fade-in-track {
+  from { opacity: 0; transform: translateX(-50%) translateY(-5px); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+/* Segment progress dots */
+.segment-dots {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.segment-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-border);
+  transition: background 0.3s;
+}
+
+.segment-dot.filled {
+  background: var(--color-accent);
+}
