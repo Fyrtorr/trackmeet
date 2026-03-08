@@ -126,6 +126,54 @@ function ringPath(outerRV: number, innerRV: number): string {
   return outer + inner
 }
 
+/**
+ * Convert a lane-0-based fraction to the equivalent fraction for another lane,
+ * so that both positions fall on the same perpendicular cross-section of the track.
+ * On straights, all lanes cover the same distance; on curves, outer lanes cover more.
+ */
+function alignedFraction(lane0Frac: number, targetLane: number): number {
+  if (targetLane === 0) return lane0Frac
+
+  const r0 = laneR(0)
+  const rT = laneR(targetLane)
+
+  // Lane 0 segment boundaries
+  const curve0 = Math.PI * r0
+  const perim0 = 2 * STRAIGHT_LEN + 2 * curve0
+  const curveFrac0 = curve0 / perim0
+  const straightFrac0 = STRAIGHT_LEN / perim0
+
+  // Target lane segment boundaries
+  const curveT = Math.PI * rT
+  const perimT = 2 * STRAIGHT_LEN + 2 * curveT
+  const curveFracT = curveT / perimT
+  const straightFracT = STRAIGHT_LEN / perimT
+
+  const f = ((lane0Frac % 1) + 1) % 1
+  const laps = Math.floor(lane0Frac)
+
+  let result: number
+  if (f < curveFrac0) {
+    // Right curve: same angular proportion
+    const t = f / curveFrac0
+    result = t * curveFracT
+  } else if (f < curveFrac0 + straightFrac0) {
+    // Back straight: same linear proportion
+    const t = (f - curveFrac0) / straightFrac0
+    result = curveFracT + t * straightFracT
+  } else if (f < 2 * curveFrac0 + straightFrac0) {
+    // Left curve: same angular proportion
+    const t = (f - curveFrac0 - straightFrac0) / curveFrac0
+    result = curveFracT + straightFracT + t * curveFracT
+  } else {
+    // Home straight: same linear proportion
+    const t = (f - 2 * curveFrac0 - straightFrac0) / straightFrac0
+    result = 2 * curveFracT + straightFracT + t * straightFracT
+  }
+
+  return laps + result
+}
+
 /** Perpendicular mark across a single lane at a fraction of the oval */
 function laneMarkLine(frac: number, lane: number) {
   const pt = getOvalPoint(frac, lane)
@@ -154,6 +202,12 @@ const START_110MH_DIST_M = 110
 // 200m start: 200m before finish → on the back curve / start of back straight
 const START_200M_FRAC = 1 - (200 / TRACK_LENGTH_M)
 
+// 1500m start: 300m before finish (1500 mod 400 = 300) → on the back straight near right curve
+const START_1500M_FRAC = 1 - (300 / TRACK_LENGTH_M)
+
+// 1500m = 3.75 laps; 5 segments → each segment = 0.75 laps
+const LAPS_PER_SEGMENT_1500 = 0.75
+const TOTAL_LAPS_1500 = 3.75
 
 // ── Extension geometry ──
 const EXT_LEFT = CX - HALF_S - EXTENSION_LEN
@@ -165,12 +219,17 @@ export function OvalTrackAnimation({
   players, eventId, currentSegment, totalSegments, phase, pendingTimes, onAnimationComplete,
 }: OvalTrackAnimationProps) {
   const [runnerPositions, setRunnerPositions] = useState<Record<number, number>>({})
+  // Track per-runner display lane (for smooth lane merging in 1500m)
+  const [runnerLanes, setRunnerLanes] = useState<Record<number, number>>({})
   const animFrameRef = useRef<number | null>(null)
   const onCompleteRef = useRef(onAnimationComplete)
   onCompleteRef.current = onAnimationComplete
 
-  const startLane = Math.floor((TOTAL_LANES - players.length) / 2)
   const is400 = eventId === '400m'
+  const is1500 = eventId === '1500m'
+
+  // For both events: spread players across center lanes at start
+  const startLane = Math.floor((TOTAL_LANES - players.length) / 2)
 
   // Stagger fractions (400m only — each lane starts further counterclockwise)
   const staggerFractions = players.map((_, i) => {
@@ -179,70 +238,167 @@ export function OvalTrackAnimation({
     return STAGGERS_400M[lane] / TRACK_LENGTH_M
   })
 
-  // Expected total time for gap scaling
-  const expectedTotal = eventId === '400m' ? 51 : 265  // seconds
+  // 1500m start offset: runners begin at 300m before finish (fraction 0.75 of one lap)
+  const startOffset = is1500 ? START_1500M_FRAC : 0
 
-  // Simple runner positioning:
-  //  - Leader advances to segmentsDone/totalSegments of the track
-  //  - Others fall behind by their time gap as a fraction of expected total
-  //  - pendingTimes includes the CURRENT round's roll times (not yet in eventResults)
-  function getTargetFraction(playerIndex: number): number {
-    const result = players[playerIndex].eventResults.find(r => r.eventId === eventId)
+  // Offset to place runner circles tangent behind the start line (circle r=5)
+  const RUNNER_RADIUS = 5
+  const lane0Perim = 2 * STRAIGHT_LEN + 2 * Math.PI * laneR(0)
+  const runnerOffset = is1500 ? -(RUNNER_RADIUS + 1) / lane0Perim : 0
+
+  // Gap scaling: ~5 meters behind per second of time gap
+  // Convert to fraction of one lap: 5m / 400m = 0.0125 per second
+  const GAP_METERS_PER_SEC = 5
+  const gapFracPerSec = GAP_METERS_PER_SEC / TRACK_LENGTH_M
+
+  // Total laps for the event
+  const totalLaps = is1500 ? TOTAL_LAPS_1500 : 1.0
+  // Finish line fraction (from origin)
+  const finishFrac = startOffset + totalLaps
+
+  // Collect all players' cumulative times (committed + pending)
+  function getPlayerTime(pi: number): { time: number; segsDone: number } {
+    const result = players[pi].eventResults.find(r => r.eventId === eventId)
     const committedSegs = result?.segments ?? []
     const committedTime = committedSegs.reduce((sum, seg) => sum + seg.time, 0)
+    const pendingTime = pendingTimes?.[pi] ?? 0
+    return {
+      time: committedTime + pendingTime,
+      segsDone: committedSegs.length + (pendingTime > 0 ? 1 : 0),
+    }
+  }
 
-    // Add pending time from current round (stored in msSegmentRolls, not yet committed)
-    const pendingTime = pendingTimes?.[playerIndex] ?? 0
-    const myTime = committedTime + pendingTime
-    const segsDone = committedSegs.length + (pendingTime > 0 ? 1 : 0)
+  // Runner positioning:
+  //  - Leader advances proportionally through the race each segment
+  //  - Others trail behind by ~5m per second of time gap
+  //  - On final segment: leader crosses finish and keeps going, others finish
+  //    at natural spacing — no clamping so gaps are preserved visually
+  function getTargetFraction(playerIndex: number): number {
+    const { time: myTime, segsDone } = getPlayerTime(playerIndex)
 
-    if (segsDone === 0) return staggerFractions[playerIndex]
+    if (segsDone === 0) return staggerFractions[playerIndex] + startOffset
 
     // Find the best (lowest) cumulative time across all players
-    const allTimes = players.map((p, i) => {
-      const r = p.eventResults.find(er => er.eventId === eventId)
-      const ct = (r?.segments ?? []).reduce((sum, seg) => sum + seg.time, 0)
-      const pt = pendingTimes?.[i] ?? 0
-      return ct + pt
-    }).filter(t => t > 0)
+    const allTimes = players.map((_, i) => getPlayerTime(i).time).filter(t => t > 0)
     const bestTime = Math.min(...allTimes)
 
-    // Leader at segmentsDone/totalSegments, others behind by gap
-    const leaderProgress = segsDone / totalSegments
-    const gapFrac = (myTime - bestTime) / expectedTotal
+    // Leader progress: proportional to segments completed
+    const leaderProgress = is1500
+      ? segsDone * LAPS_PER_SEGMENT_1500   // each segment = 0.75 laps
+      : segsDone / totalSegments           // each segment = 0.25 laps (400m)
 
-    // For the final segment, push the leader slightly past 1.0 so they cross the finish
-    const baseFrac = staggerFractions[playerIndex] + leaderProgress - gapFrac
+    // Gap: ~5 meters behind per second slower than leader
+    const timeBehind = myTime - bestTime
+    const gapFrac = timeBehind * gapFracPerSec
+
     if (segsDone >= totalSegments) {
-      // Ensure all runners end past the finish line (fraction > 1.0)
-      return Math.max(baseFrac, 1.0 + staggerFractions[playerIndex] + 0.02)
+      // Final segment: leader stops ~50 yards (45.7m) past the finish
+      // Ensure even the slowest runner ends up past the finish line
+      const maxTimeBehind = Math.max(...allTimes) - bestTime
+      const maxGapM = maxTimeBehind * GAP_METERS_PER_SEC
+      const minOvershoot = maxGapM + 10 // +10m buffer so last runner clears the line
+      const leaderOvershoot = Math.max(45.7, minOvershoot) / TRACK_LENGTH_M
+      const leaderFrac = finishFrac + leaderOvershoot
+      return leaderFrac - gapFrac
     }
-    return baseFrac
+
+    return staggerFractions[playerIndex] + startOffset + leaderProgress - gapFrac
   }
 
   // Animate runners when entering msAnimating phase
   useEffect(() => {
     if (phase !== 'msAnimating') return
 
-    const startPositions = { ...runnerPositions }
+    // Detect first segment: no committed results yet
+    const isFirstSegment = !players.some(p => {
+      const r = p.eventResults.find(er => er.eventId === eventId)
+      return (r?.segments ?? []).length > 0
+    })
+
+    // Detect final segment
+    const isFinalSegment = players.every(p => {
+      const r = p.eventResults.find(er => er.eventId === eventId)
+      const committed = (r?.segments ?? []).length
+      const pending = pendingTimes?.[players.indexOf(p)] ?? 0
+      return committed + (pending > 0 ? 1 : 0) >= totalSegments
+    })
+
+    // Use current rendered positions as animation start
+    const startPositions: Record<number, number> = {}
+    const startLanes: Record<number, number> = {}
+    players.forEach((_, i) => {
+      startPositions[i] = runnerPositions[i] ?? (staggerFractions[i] + startOffset)
+      startLanes[i] = runnerLanes[i] ?? (is1500 ? startLane + i : startLane + i)
+    })
+
     const targetPositions: Record<number, number> = {}
     players.forEach((_, i) => {
       targetPositions[i] = getTargetFraction(i)
     })
 
-    const duration = 2500
+    // For first segment: stagger the lane merge — inner runners merge first
+    // Each runner merges to lane 0 over the first 30-60% of the animation
+    const mergeTimes: Record<number, number> = {}
+    if (isFirstSegment && is1500) {
+      players.forEach((_, i) => {
+        const lane = startLane + i
+        // Inner lanes merge by 30%, outer lanes by 60%
+        mergeTimes[i] = 0.3 + (lane / TOTAL_LANES) * 0.3
+      })
+    }
+
+    // For the final segment, compute per-runner animation speeds so the leader
+    // arrives first and others cross the finish at their natural gap timing
+    const runnerSpeeds: Record<number, number> = {}
+    if (isFinalSegment) {
+      // All runners should move at roughly the same visual speed
+      // The leader covers the most distance (to 50yd past), others cover less
+      // Scale each runner's duration so they all move at the leader's speed
+      const leaderDist = Math.max(...players.map((_, i) =>
+        Math.abs(targetPositions[i] - startPositions[i])
+      ))
+      players.forEach((_, i) => {
+        const dist = Math.abs(targetPositions[i] - startPositions[i])
+        // Speed = fraction of leader's animation time proportional to distance
+        runnerSpeeds[i] = leaderDist > 0 ? dist / leaderDist : 1
+      })
+    }
+
+    const duration = 5000
     const startTime = performance.now()
 
     function animate(now: number) {
       const elapsed = now - startTime
       const t = Math.min(1, elapsed / duration)
-      const ease = 1 - Math.pow(1 - t, 3)
+      // First segment: ease-in (accelerate from standstill)
+      // Subsequent segments: linear (constant running speed)
+      const baseProgress = isFirstSegment ? t * t : t
       const pos: Record<number, number> = {}
+      const lanes: Record<number, number> = {}
       players.forEach((_, i) => {
-        const start = startPositions[i] ?? staggerFractions[i]
-        pos[i] = start + (targetPositions[i] - start) * ease
+        const start = startPositions[i]
+        let progress: number
+        if (isFinalSegment) {
+          // Each runner moves at the same visual speed — leader arrives first,
+          // others keep running until they reach their target
+          const runnerT = Math.min(1, t / runnerSpeeds[i])
+          progress = runnerT
+        } else {
+          progress = baseProgress
+        }
+        pos[i] = start + (targetPositions[i] - start) * progress
+
+        // Lane interpolation for first segment merge
+        if (isFirstSegment && is1500 && mergeTimes[i] !== undefined) {
+          const mergeProgress = Math.min(1, t / mergeTimes[i])
+          const smoothMerge = mergeProgress * mergeProgress * (3 - 2 * mergeProgress) // smoothstep
+          lanes[i] = startLanes[i] * (1 - smoothMerge) // lerp from start lane to 0
+        } else {
+          lanes[i] = 0
+        }
       })
       setRunnerPositions(pos)
+      setRunnerLanes(lanes)
       if (t < 1) {
         animFrameRef.current = requestAnimationFrame(animate)
       } else {
@@ -253,11 +409,21 @@ export function OvalTrackAnimation({
     return () => { if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current) }
   }, [phase, currentSegment]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Init positions at stagger marks
+  // Init positions at start marks
   useEffect(() => {
     const init: Record<number, number> = {}
-    players.forEach((_, i) => { init[i] = staggerFractions[i] })
+    const initLanes: Record<number, number> = {}
+    players.forEach((_, i) => {
+      if (is1500) {
+        init[i] = alignedFraction(startOffset + runnerOffset, startLane + i)
+        initLanes[i] = startLane + i
+      } else {
+        init[i] = staggerFractions[i] + startOffset
+        initLanes[i] = startLane + i
+      }
+    })
     setRunnerPositions(init)
+    setRunnerLanes(initLanes)
   }, [eventId, players.length]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Finish line coordinates (right end of home straight)
@@ -425,7 +591,34 @@ export function OvalTrackAnimation({
           )
         })}
 
-        {/* ── LANE NUMBERS (on home straight, centered) ── */}
+        {/* ── 1500m START LINE (from inner border to outer border) ── */}
+        {(() => {
+          // Get the track direction at the start to compute the perpendicular
+          const refPt1 = getOvalPoint(START_1500M_FRAC - 0.002, 0)
+          const refPt2 = getOvalPoint(START_1500M_FRAC + 0.002, 0)
+          const tx = refPt2.x - refPt1.x
+          const ty = refPt2.y - refPt1.y
+          const tLen = Math.sqrt(tx * tx + ty * ty)
+          // Normal (perpendicular), pointing outward
+          const nx = -ty / tLen
+          const ny = tx / tLen
+          // Anchor at inner lane center, then extend to inner/outer borders
+          const anchorPt = getOvalPoint(START_1500M_FRAC, 0)
+          const halfLane = LANE_WIDTH / 2
+          const innerX = anchorPt.x - nx * halfLane
+          const innerY = anchorPt.y - ny * halfLane
+          const outerX = innerX + nx * TRACK_WIDTH
+          const outerY = innerY + ny * TRACK_WIDTH
+          return (
+            <line
+              x1={innerX} y1={innerY}
+              x2={outerX} y2={outerY}
+              stroke="white" strokeWidth={2} opacity={is1500 ? 0.85 : 0.25}
+            />
+          )
+        })()}
+
+        {/* ── LANE NUMBERS (on home straight, near finish) ── */}
         {Array.from({ length: TOTAL_LANES }, (_, i) => {
           const r = laneR(i)
           return (
@@ -447,24 +640,86 @@ export function OvalTrackAnimation({
         {/* ══════════════════════════════════════════ */}
         {/* ══ RUNNERS                             ══ */}
         {/* ══════════════════════════════════════════ */}
-        {players.map((p, i) => {
-          const lane = startLane + i
-          const fraction = runnerPositions[i] ?? staggerFractions[i]
-          const pt = getOvalPoint(fraction, lane)
-          const g = getAthleteGraphic(p.athleteId)
-          return (
-            <g key={p.id}>
-              <circle cx={pt.x} cy={pt.y} r={5} fill={g.color} stroke="white" strokeWidth={1.5} />
-              <text
-                x={pt.x} y={pt.y - 9}
-                textAnchor="middle" fill={g.color}
-                fontSize={8} fontWeight={700} fontFamily="'Consolas', monospace"
-              >
-                {g.abbreviation}
-              </text>
-            </g>
-          )
-        })}
+        {(() => {
+          // Build runner data with fractions
+          const runners = players.map((p, i) => ({
+            player: p,
+            index: i,
+            fraction: runnerPositions[i] ?? (staggerFractions[i] + startOffset),
+            baseLane: startLane + i,
+            graphic: getAthleteGraphic(p.athleteId),
+          }))
+
+          // For 1500m: use runnerLanes for smooth lane interpolation
+          // During first segment animation, lanes interpolate from start lane → 0
+          // After that, detect overlaps to shift runners outward when bunched
+          if (is1500) {
+            // Determine display lane for each runner
+            const displayLanes: Record<number, number> = {}
+
+            // Start with the animated lane value (smooth merge during first segment)
+            runners.forEach(r => {
+              displayLanes[r.index] = runnerLanes[r.index] ?? 0
+            })
+
+            // If all runners are at lane 0, apply overlap detection
+            const allAtLane0 = runners.every(r => (runnerLanes[r.index] ?? 0) < 0.1)
+            if (allAtLane0) {
+              const sorted = [...runners].sort((a, b) => b.fraction - a.fraction)
+              const OVERLAP_THRESHOLD = 0.008 // ~3m — allow more overlap before lane shift
+
+              for (const runner of sorted) {
+                let lane = 0
+                for (const placed of sorted) {
+                  if (placed.index === runner.index) break
+                  if (displayLanes[placed.index] === undefined) continue
+                  const gap = Math.abs(
+                    (placed.fraction % 1) - (runner.fraction % 1)
+                  )
+                  const wrapGap = Math.min(gap, 1 - gap)
+                  if (wrapGap < OVERLAP_THRESHOLD && displayLanes[placed.index] === lane) {
+                    lane++
+                  }
+                }
+                displayLanes[runner.index] = Math.min(lane, TOTAL_LANES - 1)
+              }
+            }
+
+            return runners.map(r => {
+              const lane = displayLanes[r.index] ?? 0
+              const pt = getOvalPoint(r.fraction, lane)
+              return (
+                <g key={r.player.id}>
+                  <circle cx={pt.x} cy={pt.y} r={5} fill={r.graphic.color} stroke="white" strokeWidth={1.5} />
+                  <text
+                    x={pt.x} y={pt.y - 9}
+                    textAnchor="middle" fill={r.graphic.color}
+                    fontSize={8} fontWeight={700} fontFamily="'Consolas', monospace"
+                  >
+                    {r.graphic.abbreviation}
+                  </text>
+                </g>
+              )
+            })
+          }
+
+          // 400m: each runner in their own staggered lane, no overlap issues
+          return runners.map(r => {
+            const pt = getOvalPoint(r.fraction, r.baseLane)
+            return (
+              <g key={r.player.id}>
+                <circle cx={pt.x} cy={pt.y} r={5} fill={r.graphic.color} stroke="white" strokeWidth={1.5} />
+                <text
+                  x={pt.x} y={pt.y - 9}
+                  textAnchor="middle" fill={r.graphic.color}
+                  fontSize={8} fontWeight={700} fontFamily="'Consolas', monospace"
+                >
+                  {r.graphic.abbreviation}
+                </text>
+              </g>
+            )
+          })
+        })()}
       </svg>
     </div>
   )
