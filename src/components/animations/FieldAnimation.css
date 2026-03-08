@@ -1,14 +1,14 @@
 .field-animation {
   width: 100%;
-  padding: 0.5rem 0;
+  padding: 0.3rem 0;
 }
 
 .field-track {
   position: relative;
-  height: 80px;
+  height: 60px;
   background: linear-gradient(to right, var(--color-surface), var(--color-surface-alt));
   border: 1px solid var(--color-border);
-  border-radius: 8px;
+  border-radius: 6px;
   overflow: hidden;
 }
 
@@ -31,25 +31,53 @@
 }
 
 .field-marker-label {
-  font-size: 0.6rem;
+  font-size: 0.55rem;
   color: var(--color-text-muted);
   padding: 2px 0;
   white-space: nowrap;
+}
+
+/* Best distance yellow line */
+.field-best-line {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  z-index: 1;
+}
+
+.field-best-marker {
+  width: 2px;
+  flex: 1;
+  background: #eab308;
+  opacity: 0.85;
+}
+
+.field-best-label {
+  font-size: 0.5rem;
+  font-weight: 700;
+  color: #eab308;
+  padding: 1px 3px;
+  white-space: nowrap;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
 }
 
 /* Projectile */
 .field-projectile {
   position: absolute;
   top: 50%;
-  left: 5%;
-  font-size: 1.2rem;
+  left: 0%;
+  font-size: 1rem;
   transform: translate(-50%, -50%);
   transition: none;
   z-index: 2;
 }
 
 .field-projectile.flying {
-  animation: projectile-arc 1s ease-out forwards;
+  animation: projectile-arc 1.2s ease-out forwards;
 }
 
 .field-projectile.landed {
@@ -61,14 +89,14 @@
 
 @keyframes projectile-arc {
   0% {
-    left: 5%;
+    left: 0%;
     top: 55%;
     transform: translate(-50%, -50%);
   }
-  30% {
+  25% {
     top: 15%;
   }
-  60% {
+  55% {
     top: 20%;
   }
   100% {
@@ -104,7 +132,7 @@
 }
 
 .landing-label {
-  font-size: 0.7rem;
+  font-size: 0.65rem;
   font-weight: 700;
   color: var(--color-accent);
   padding: 2px 4px;

@@ -13,6 +13,7 @@ import { OvalTrackAnimation } from './animations/OvalTrackAnimation'
 import { RaceTrack } from './animations/RaceTrack'
 import { LongJumpPit } from './animations/LongJumpPit'
 import { ShotPutRing } from './animations/ShotPutRing'
+import { ThrowingFieldAnimation } from './animations/ThrowingFieldAnimation'
 import { SplitScoreboard } from './SplitScoreboard'
 import { clearsHeight, parseFeetInches } from '../game/chartLookup'
 import { getAthleteGraphic } from '../data/athleteGraphics'
@@ -30,6 +31,7 @@ export function GameScreen() {
   const [raceComplete, setRaceComplete] = useState(false)
   const [jumpTrigger, setJumpTrigger] = useState(0)
   const [throwTrigger, setThrowTrigger] = useState(0)
+  const [throwLanded, setThrowLanded] = useState(false)
   const [heightJumpTrigger, setHeightJumpTrigger] = useState(0)
   const [showScorecard, setShowScorecard] = useState(false)
   const [heightAction, setHeightAction] = useState<'choosing' | 'attempting' | 'confirming-done'>('choosing')
@@ -44,6 +46,9 @@ export function GameScreen() {
   const isSprint = event?.type === 'sprint'
   const isLongJump = event?.id === 'long_jump'
   const isShotPut = event?.id === 'shot_put'
+  const isDiscus = event?.id === 'discus'
+  const isJavelin = event?.id === 'javelin'
+  const isThrowingField = isShotPut || isDiscus || isJavelin
   const isHeight = event?.type === 'height'
   const isMultiSegment = event?.type === 'multi_segment'
 
@@ -122,6 +127,7 @@ export function GameScreen() {
 
   const handleEffortSelect = useCallback((effort: EffortType) => {
     setChosenEffort(effort)
+    setThrowLanded(false)
     state.chooseEffort(effort)
     setIsRolling(true)
     state.performRoll()
@@ -138,7 +144,10 @@ export function GameScreen() {
     }
     if (currentEventId === 'long_jump') {
       setJumpTrigger(t => t + 1)
-    } else if (currentEventId === 'shot_put') {
+    } else if (currentEventId === 'shot_put' || currentEventId === 'discus' || currentEventId === 'javelin') {
+      const sr = useGameStore.getState()
+      const isFoul = sr.lastResult?.isSpecial ?? false
+      setThrowLanded(isFoul) // fouls skip the flying animation
       setThrowTrigger(t => t + 1)
     } else if (currentEventType === 'height') {
       setHeightJumpTrigger(t => t + 1)
@@ -213,7 +222,9 @@ export function GameScreen() {
   const sprintRaceInProgress = isSprint && raceTriggered && !raceComplete
   const sprintWaitingForRace = isSprint && allPlayersRolled && !raceComplete
 
-  const showAdvance = (hasResult || isMsSplitReview) && !isRolling && !sprintWaitingForRace && !sprintRaceInProgress
+  // For throwing events, delay showing advance/result until the throw animation finishes
+  const throwAnimDone = !isThrowingField || throwLanded
+  const showAdvance = (hasResult || isMsSplitReview) && !isRolling && !sprintWaitingForRace && !sprintRaceInProgress && throwAnimDone
   const isFieldEvent = event.type === 'field_throw' || event.type === 'field_jump'
   const isLastPlayer = state.currentPlayerIndex >= state.players.length - 1
   // For height events, check if all players are done
@@ -281,20 +292,112 @@ export function GameScreen() {
         </div>
       )}
 
-      {/* Shot put ring */}
-      {isShotPut && (
-        <div className="race-track-container">
-          <ShotPutRing
-            players={state.players}
-            currentPlayerIndex={state.currentPlayerIndex}
-            eventId={event.id}
-            lastResult={state.lastResult?.numericValue ?? null}
-            lastResultDisplay={state.lastResult?.displayValue ?? ''}
-            isSpecial={state.lastResult?.isSpecial ?? false}
-            throwTrigger={throwTrigger}
-          />
+      {/* Throwing field (shot put, discus, javelin) — ms-style layout */}
+      {isThrowingField && (<>
+        <div className="ms-top-row">
+          <div className="ms-chart-side">
+            <ChartDisplay
+              athlete={athlete}
+              eventId={event.id}
+              highlightDice={state.lastRoll?.total ?? null}
+              highlightEffort={chosenEffort}
+            />
+          </div>
+          <div className="ms-track-side">
+            <ThrowingFieldAnimation
+              players={state.players}
+              currentPlayerIndex={state.currentPlayerIndex}
+              eventId={event.id}
+              isSpecial={state.lastResult?.isSpecial ?? false}
+              showLanding={throwLanded}
+            />
+          </div>
+          <div className="ms-right-side">
+            <div className="ms-scoreboard-side">
+              <EventScorecard
+                players={state.players}
+                event={event}
+                currentPlayerIndex={state.currentPlayerIndex}
+                heightList={heightList}
+                playerMaxHeights={playerMaxHeights}
+              />
+            </div>
+            <div className="ms-controls-side">
+              <div className="player-badge" style={{ borderColor: getAthleteGraphic(player.athleteId).color }}>
+                {player.name}
+              </div>
+
+              {attemptDisplay && (
+                <div className="attempt-badge">{attemptDisplay}</div>
+              )}
+
+              <DiceDisplay
+                roll={state.lastRoll}
+                rolling={isRolling}
+                onRollComplete={handleRollComplete}
+              />
+
+              {showResultBox && throwAnimDone && (
+                <div className={`result-display ${isSpecial ? 'special' : 'normal'}`}>
+                  <span className="result-label">Result</span>
+                  <span className="result-value">{lastResultDisplay}</span>
+                  {currentResult && currentResult.points > 0 && isEventDone && (
+                    <span className="result-points">{currentResult.points} pts</span>
+                  )}
+                </div>
+              )}
+
+              {isChoosingEffort && (
+                <EffortSelector
+                  onSelect={handleEffortSelect}
+                  disabled={isRolling}
+                  injuryInEffect={injuryActive}
+                  staminaRemaining={stamina}
+                  allOutCost={allOutCost}
+                />
+              )}
+
+              {showAdvance && (
+                <button className="primary advance-btn" onClick={handleAdvance}>
+                  {advanceLabel}
+                </button>
+              )}
+            </div>
+          </div>
         </div>
-      )}
+        {hasResult && !isRolling && !throwLanded && (
+          <FieldAnimation
+            eventId={event.id}
+            result={state.lastResult?.numericValue ?? null}
+            isSpecial={isSpecial}
+            bestDistance={(() => {
+              // Best distance excluding the current player's latest attempt
+              // so the yellow line stays at the previous best during the animation
+              let best: number | null = null
+              const currentP = state.players[state.currentPlayerIndex]
+              for (const p of state.players) {
+                const er = p.eventResults.find(r => r.eventId === event.id)
+                if (!er) continue
+                const isCurrentPlayer = p.id === currentP?.id
+                if (isCurrentPlayer) {
+                  // Use second-best from this player's attempts (exclude latest)
+                  const valid = er.attempts.filter(a => !a.isSpecial && a.resolvedResult !== null)
+                  const previous = valid.slice(0, -1)
+                  for (const a of previous) {
+                    if (best === null || a.resolvedResult! > best) best = a.resolvedResult!
+                  }
+                } else {
+                  if (er.bestResult != null) {
+                    if (best === null || er.bestResult > best) best = er.bestResult
+                  }
+                }
+              }
+              return best
+            })()}
+            onComplete={() => setThrowLanded(true)}
+          />
+        )}
+      </>)}
 
       {/* Height event (high jump / pole vault) */}
       {isHeight && (
@@ -420,7 +523,7 @@ export function GameScreen() {
         </>
       )}
 
-      {!isMultiSegment && (
+      {!isMultiSegment && !isThrowingField && (
         <div className={`game-body ${isHeight ? 'height-layout' : ''}`}>
           <div className="game-left">
             <ChartDisplay

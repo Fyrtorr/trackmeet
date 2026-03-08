@@ -1,0 +1,13 @@
+.throwing-field {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  background: #1a3a14;
+  border-radius: 6px;
+  padding: 0.1rem 0;
+}
+
+.throwing-field-svg {
+  width: 100%;
+  height: auto;
+}
