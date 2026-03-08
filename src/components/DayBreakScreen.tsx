@@ -1,13 +1,17 @@
 import { useGameStore } from '../game/store'
+import { EVENTS } from '../data/events'
 import './DayBreakScreen.css'
 
 export function DayBreakScreen() {
   const players = useGameStore(s => s.players)
+  const currentEventIndex = useGameStore(s => s.currentEventIndex)
 
   const sorted = [...players].sort((a, b) => b.totalPoints - a.totalPoints)
 
   function handleContinue() {
-    useGameStore.setState({ phase: 'choosingEffort' })
+    const nextEvent = EVENTS[currentEventIndex]
+    const isMs = nextEvent?.type === 'multi_segment'
+    useGameStore.setState({ phase: isMs ? 'msEffortPicking' : 'choosingEffort' })
   }
 
   return (

@@ -108,6 +108,64 @@
   grid-template-columns: 240px 1fr auto;
 }
 
+/* Multi-segment top row: track + chart alongside */
+.ms-top-row {
+  display: flex;
+  gap: 0.5rem;
+  padding: 0.4rem 1.5rem 0;
+  align-items: start;
+}
+
+.ms-track-side {
+  flex: 0 1 50%;
+  min-width: 0;
+}
+
+.ms-chart-side {
+  flex: 0 0 280px;
+}
+
+.ms-chart-side .chart-table-wrapper {
+  max-height: none;
+  overflow-y: visible;
+}
+
+/* Right column: scoreboard stacked above controls */
+.ms-right-side {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  flex: 0 0 auto;
+  min-width: 280px;
+}
+
+.ms-scoreboard-side {
+  flex: 0 0 auto;
+}
+
+.ms-controls-side {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+
+/* Multi-segment animating label */
+.ms-animating-label {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--color-accent);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  animation: ms-pulse 1s ease-in-out infinite;
+}
+
+@keyframes ms-pulse {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+
 .game-left {
   min-width: 0;
 }
@@ -124,8 +182,8 @@
   min-width: 0;
 }
 
-/* Height player name badge */
-.height-player-badge {
+/* Player name badge above dice */
+.player-badge {
   font-size: 0.85rem;
   font-weight: 700;
   padding: 0.3rem 1rem;

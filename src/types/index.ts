@@ -143,7 +143,11 @@ export type GamePhase =
   | 'showingResult'
   | 'eventComplete'
   | 'dayBreak'
-  | 'finished';
+  | 'finished'
+  | 'msEffortPicking'    // multi-segment: round-robin effort selection
+  | 'msRolling'          // multi-segment: round-robin dice rolling
+  | 'msAnimating'        // multi-segment: race animation playing
+  | 'msSplitReview';     // multi-segment: reviewing split times
 
 export interface GameSettings {
   scoringMode: 'classic' | 'quick';
@@ -153,6 +157,14 @@ export interface GameSettings {
   soundVolume: number;
   autoRollDelay: number | null;        // ms, null = off
   autoAdvanceDelay: number | null;     // ms, null = off
+}
+
+export interface MsPlayerRoll {
+  dice: DiceRoll;
+  result: ChartLookupResult;
+  effort: EffortType;
+  staminaCost: number;
+  time: number;                        // segment time from chart
 }
 
 export interface GameState {
@@ -166,4 +178,9 @@ export interface GameState {
   currentHeightIndex: number;          // for height events (index into height list)
   lastRoll: DiceRoll | null;
   lastResult: ChartLookupResult | null;
+
+  // Multi-segment round-robin state
+  msSegmentEfforts: Record<number, EffortType>;   // playerIndex -> chosen effort
+  msSegmentRolls: Record<number, MsPlayerRoll>;   // playerIndex -> roll result
+  msRollingPlayerIndex: number;                    // tracks who is rolling (separate from effort picker)
 }

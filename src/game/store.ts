@@ -2,7 +2,8 @@ import { create } from 'zustand';
 import type {
   GameState, GameSettings, PlayerState,
   EffortType, EventResult,
-  AttemptResult, InjuryEffect,
+  AttemptResult, InjuryEffect, MsPlayerRoll,
+  DiceRoll, ChartLookupResult,
 } from '../types';
 import { EVENTS, STAMINA_PER_DAY, MAX_INJURY_POINTS, FATIGUE_THRESHOLD, MAX_FALSE_STARTS, MAX_CONSECUTIVE_FOULS, HIGH_JUMP_HEIGHTS, POLE_VAULT_HEIGHTS, generateHighJumpHeights } from '../data/events';
 import { rollDice } from './dice';
@@ -33,6 +34,9 @@ const initialState: GameState = {
   currentHeightIndex: 0,
   lastRoll: null,
   lastResult: null,
+  msSegmentEfforts: {},
+  msSegmentRolls: {},
+  msRollingPlayerIndex: 0,
 };
 
 function getCurrentStamina(player: PlayerState, day: 1 | 2): number {
@@ -172,6 +176,11 @@ interface GameActions {
   passHeight: () => void;
   doneJumping: () => void;
 
+  // Multi-segment round-robin
+  msChooseEffort: (effort: EffortType) => void;
+  msPerformRoll: () => void;
+  msAnimationComplete: () => void;
+
   // Utility
   resetGame: () => void;
   canAffordEffort: (effort: EffortType) => boolean;
@@ -191,15 +200,22 @@ export const useGameStore = create<GameState & GameActions>((set, get) => ({
   removePlayer: (id) =>
     set((s) => ({ players: s.players.filter(p => p.id !== id) })),
 
-  startGame: (startEventIndex?: number) =>
+  startGame: (startEventIndex?: number) => {
+    const eventIdx = startEventIndex ?? 0;
+    const startEvent = EVENTS[eventIdx];
+    const isMs = startEvent?.type === 'multi_segment';
     set({
-      phase: 'choosingEffort',
+      phase: isMs ? 'msEffortPicking' : 'choosingEffort',
       currentPlayerIndex: 0,
-      currentEventIndex: startEventIndex ?? 0,
+      currentEventIndex: eventIdx,
       currentAttempt: 0,
       currentSegment: 0,
       currentHeightIndex: 0,
-    }),
+      msSegmentEfforts: {},
+      msSegmentRolls: {},
+      msRollingPlayerIndex: 0,
+    });
+  },
 
   canAffordEffort: (effort) => {
     const state = get();
@@ -589,6 +605,38 @@ export const useGameStore = create<GameState & GameActions>((set, get) => ({
     const event = getCurrentEvent(state);
     if (!event) return;
 
+    // Multi-segment split review → next segment or event complete
+    if (state.phase === 'msSplitReview') {
+      const totalSegments = event.segments!;
+      const nextSegment = state.currentSegment + 1;
+
+      if (nextSegment < totalSegments) {
+        // Next segment — reset for effort picking
+        set({
+          currentSegment: nextSegment,
+          currentPlayerIndex: 0,
+          msSegmentEfforts: {},
+          msSegmentRolls: {},
+          msRollingPlayerIndex: 0,
+          lastRoll: null,
+          lastResult: null,
+          phase: 'msEffortPicking',
+        });
+      } else {
+        // Event complete — set segment to total so old checks don't re-trigger
+        set({
+          currentSegment: totalSegments,
+          phase: 'showingResult',
+          msSegmentEfforts: {},
+          msSegmentRolls: {},
+          msRollingPlayerIndex: 0,
+        });
+        // Re-enter advanceGame to handle event transition
+        get().advanceGame();
+      }
+      return;
+    }
+
     if (state.phase === 'eventComplete' || state.phase === 'showingResult') {
       const isFieldEvent = event.type === 'field_throw' || event.type === 'field_jump';
 
@@ -645,11 +693,9 @@ export const useGameStore = create<GameState & GameActions>((set, get) => ({
         // No per-height attempt limit — only 3 consecutive misses (across all heights) eliminates
         const playerDoneAtThisHeight = clearedCurrent || passed || playerEliminated;
 
-        if (!playerDoneAtThisHeight) {
-          // Same player, same height — they can attempt again, pass, or stop
-          set({ lastRoll: null, lastResult: null, phase: 'choosingEffort' });
-          return;
-        }
+        // Check if the player just missed (last attempt at this height was X)
+        const lastAttemptAtHeight = currentHeightEntry?.attempts[currentHeightEntry.attempts.length - 1];
+        const justMissed = lastAttemptAtHeight === 'X' && !playerEliminated;
 
         // Find next player who still needs to act at this height (wraps around)
         const isPlayerDoneAtHeight = (playerIdx: number): boolean => {
@@ -661,6 +707,14 @@ export const useGameStore = create<GameState & GameActions>((set, get) => ({
           return false;
         };
 
+        // After a miss, rotate to the next unresolved player first
+        // Only stay on current player if they haven't attempted yet or are the only one left
+        if (!playerDoneAtThisHeight && !justMissed) {
+          // Player hasn't attempted at this height yet — stay on them
+          set({ lastRoll: null, lastResult: null, phase: 'choosingEffort' });
+          return;
+        }
+
         const findNextPlayerForHeight = (startAfter: number): number => {
           // Search forward from current player, then wrap around
           for (let offset = 1; offset < state.players.length; offset++) {
@@ -671,6 +725,13 @@ export const useGameStore = create<GameState & GameActions>((set, get) => ({
         };
 
         const nextPlayer = findNextPlayerForHeight(state.currentPlayerIndex);
+
+        // If current player just missed but is the only one unresolved, stay on them
+        if (nextPlayer === -1 && !playerDoneAtThisHeight) {
+          set({ lastRoll: null, lastResult: null, phase: 'choosingEffort' });
+          return;
+        }
+
         if (nextPlayer !== -1) {
           const np = state.players[nextPlayer];
           const updates: Partial<GameState> = {
@@ -723,8 +784,8 @@ export const useGameStore = create<GameState & GameActions>((set, get) => ({
         return;
       }
 
-      // Non-field, non-height events: move to next player
-      if (!isFieldEvent && event.type !== 'height') {
+      // Non-field, non-height, non-multi-segment events: move to next player
+      if (!isFieldEvent && event.type !== 'height' && event.type !== 'multi_segment') {
         const nextPlayerIndex = state.currentPlayerIndex + 1;
         if (nextPlayerIndex < state.players.length) {
           const nextPlayer = state.players[nextPlayerIndex];
@@ -786,31 +847,23 @@ export const useGameStore = create<GameState & GameActions>((set, get) => ({
         return updated;
       });
 
-      if (currentDay !== nextDay) {
-        set({
-          players: updatedPlayers,
-          currentEventIndex: nextEventIndex,
-          currentPlayerIndex: 0,
-          currentAttempt: 0,
-          currentSegment: 0,
-          currentHeightIndex: 0,
-          lastRoll: null,
-          lastResult: null,
-          phase: 'dayBreak',
-        });
-      } else {
-        set({
-          players: updatedPlayers,
-          currentEventIndex: nextEventIndex,
-          currentPlayerIndex: 0,
-          currentAttempt: 0,
-          currentSegment: 0,
-          currentHeightIndex: 0,
-          lastRoll: null,
-          lastResult: null,
-          phase: 'choosingEffort',
-        });
-      }
+      const nextIsMs = nextEvent.type === 'multi_segment';
+      const nextPhase = currentDay !== nextDay ? 'dayBreak' : (nextIsMs ? 'msEffortPicking' : 'choosingEffort');
+
+      set({
+        players: updatedPlayers,
+        currentEventIndex: nextEventIndex,
+        currentPlayerIndex: 0,
+        currentAttempt: 0,
+        currentSegment: 0,
+        currentHeightIndex: 0,
+        lastRoll: null,
+        lastResult: null,
+        phase: nextPhase,
+        msSegmentEfforts: {},
+        msSegmentRolls: {},
+        msRollingPlayerIndex: 0,
+      });
     }
   },
 
@@ -882,6 +935,260 @@ export const useGameStore = create<GameState & GameActions>((set, get) => ({
     ];
     updatedPlayers[state.currentPlayerIndex] = updatedPlayer;
     set({ players: updatedPlayers, phase: 'showingResult', lastRoll: null, lastResult: null });
+  },
+
+  // ── Multi-segment round-robin actions ──
+
+  msChooseEffort: (effort) => {
+    const state = get();
+    if (state.phase !== 'msEffortPicking') return;
+    const event = getCurrentEvent(state);
+    const player = state.players[state.currentPlayerIndex];
+    if (!event || !player) return;
+
+    // Validate stamina
+    const cost = getStaminaCost(effort, event, player);
+    const stamina = getCurrentStamina(player, event.day);
+    if (cost > stamina) return;
+
+    const newEfforts = { ...state.msSegmentEfforts, [state.currentPlayerIndex]: effort };
+
+    // Move to next player for effort picking
+    const nextPlayer = state.currentPlayerIndex + 1;
+    if (nextPlayer < state.players.length) {
+      set({ msSegmentEfforts: newEfforts, currentPlayerIndex: nextPlayer });
+    } else {
+      // All efforts picked → move to rolling phase, start with player 0
+      set({
+        msSegmentEfforts: newEfforts,
+        phase: 'msRolling',
+        currentPlayerIndex: 0,
+        msRollingPlayerIndex: 0,
+      });
+    }
+  },
+
+  msPerformRoll: () => {
+    const state = get();
+    if (state.phase !== 'msRolling') return;
+
+    const event = getCurrentEvent(state);
+    const playerIndex = state.msRollingPlayerIndex;
+    const player = state.players[playerIndex];
+    if (!event || !player) return;
+
+    const athlete = getPlayerAthlete(player);
+    if (!athlete) return;
+
+    const effort = state.msSegmentEfforts[playerIndex];
+    if (!effort) return;
+
+    const dice = rollDice();
+    let result = lookupChart(athlete, event.id, effort, dice.total);
+
+    // Handle FS? — only counts as false start in 1st segment of 400m
+    if (result.specialType === 'FS?' && event.id === '400m') {
+      if (state.currentSegment > 0) {
+        const dice2 = rollDice();
+        result = lookupChart(athlete, event.id, effort, dice2.total);
+      }
+    }
+
+    // Determine stamina cost
+    let staminaCost = 0;
+    if (result.specialType === 'FS' || result.specialType === 'FS?') {
+      staminaCost = 0;
+    } else {
+      staminaCost = getStaminaCost(effort, event, player);
+    }
+
+    // Handle INJ results
+    let resolvedResult = result;
+    const updatedPlayers = [...state.players];
+    const updatedPlayer = { ...player };
+
+    if (result.specialType === 'INJ 1' || result.specialType === 'INJ 2') {
+      const injPoints = result.specialType === 'INJ 1' ? 1 : 2;
+      const injStamina = injPoints;
+      const reRoll = rollDice();
+      resolvedResult = lookupChart(athlete, event.id, 'safe', reRoll.total);
+
+      updatedPlayer.injuryPoints += injPoints;
+      updatedPlayer.injuryInEffect = result.specialType === 'INJ 1'
+        ? { type: 'INJ1', expiresAfterEventOrder: event.order + 1 }
+        : { type: 'INJ2', expiresAfterEventOrder: event.day === 1 ? 5 : 10 };
+
+      if (event.day === 1) updatedPlayer.staminaDay1 -= injStamina;
+      else updatedPlayer.staminaDay2 -= injStamina;
+
+      if (updatedPlayer.injuryPoints >= MAX_INJURY_POINTS) {
+        updatedPlayer.eliminated = true;
+        updatedPlayer.eliminationReason = 'Eliminated due to injury';
+      }
+      if (getCurrentStamina(updatedPlayer, event.day) < 0) {
+        updatedPlayer.eliminated = true;
+        updatedPlayer.eliminationReason = 'Eliminated: not enough stamina to cover injury';
+      }
+
+      updatedPlayers[playerIndex] = updatedPlayer;
+    }
+
+    // Handle false starts
+    if (result.specialType === 'FS' || (result.specialType === 'FS?' && state.currentSegment === 0)) {
+      updatedPlayer.falseStarts += 1;
+      updatedPlayers[playerIndex] = updatedPlayer;
+      set({ players: updatedPlayers });
+
+      if (updatedPlayer.falseStarts >= MAX_FALSE_STARTS) {
+        // DQ — record result and skip this player
+        const currentER = updatedPlayer.eventResults.find(r => r.eventId === event.id);
+        const eventResult: EventResult = {
+          eventId: event.id,
+          attempts: [...(currentER?.attempts || [])],
+          bestResult: null,
+          bestResultDisplay: 'DQ - False Start',
+          points: 0,
+        };
+        updatedPlayer.eventResults = [
+          ...updatedPlayer.eventResults.filter(r => r.eventId !== event.id),
+          eventResult,
+        ];
+        updatedPlayers[playerIndex] = updatedPlayer;
+      }
+
+      // Store roll but with 0 time (DQ or re-attempt)
+      const rollData: MsPlayerRoll = {
+        dice, result: resolvedResult, effort, staminaCost: 0,
+        time: 0,
+      };
+      const newRolls = { ...state.msSegmentRolls, [playerIndex]: rollData };
+
+      // If not DQ, they need to re-roll — for simplicity in round-robin,
+      // treat false start as 0 time penalty and continue
+      // (The FS result is shown but they stay in the race)
+      const nextRolling = playerIndex + 1;
+      if (nextRolling < state.players.length) {
+        set({
+          players: updatedPlayers,
+          msSegmentRolls: newRolls,
+          msRollingPlayerIndex: nextRolling,
+          currentPlayerIndex: nextRolling,
+          lastRoll: dice,
+          lastResult: result,
+        });
+      } else {
+        set({
+          players: updatedPlayers,
+          msSegmentRolls: newRolls,
+          phase: 'msAnimating',
+          lastRoll: dice,
+          lastResult: result,
+        });
+      }
+      return;
+    }
+
+    const time = resolvedResult.numericValue ?? 0;
+    const rollData: MsPlayerRoll = {
+      dice, result: resolvedResult, effort, staminaCost, time,
+    };
+    const newRolls = { ...state.msSegmentRolls, [playerIndex]: rollData };
+
+    // Apply stamina immediately (unless injury already deducted)
+    if (!(result.specialType === 'INJ 1' || result.specialType === 'INJ 2')) {
+      if (event.day === 1) updatedPlayer.staminaDay1 -= staminaCost;
+      else updatedPlayer.staminaDay2 -= staminaCost;
+    }
+    updatedPlayers[playerIndex] = updatedPlayer;
+
+    const nextRolling = playerIndex + 1;
+    if (nextRolling < state.players.length) {
+      set({
+        players: updatedPlayers,
+        msSegmentRolls: newRolls,
+        msRollingPlayerIndex: nextRolling,
+        currentPlayerIndex: nextRolling,
+        lastRoll: dice,
+        lastResult: resolvedResult,
+      });
+    } else {
+      // All players rolled — move to animation
+      set({
+        players: updatedPlayers,
+        msSegmentRolls: newRolls,
+        phase: 'msAnimating',
+        lastRoll: dice,
+        lastResult: resolvedResult,
+      });
+    }
+  },
+
+  msAnimationComplete: () => {
+    const state = get();
+    if (state.phase !== 'msAnimating') return;
+
+    const event = getCurrentEvent(state);
+    if (!event) return;
+
+    // Apply all segment results to players
+    const updatedPlayers = [...state.players];
+    const totalSegments = event.segments!;
+    const nextSegment = state.currentSegment + 1;
+    const isComplete = nextSegment >= totalSegments;
+
+    for (let pi = 0; pi < state.players.length; pi++) {
+      const roll = state.msSegmentRolls[pi];
+      if (!roll || roll.time === 0) continue; // skip DQ/FS players
+
+      const p = { ...updatedPlayers[pi] };
+      const currentER = p.eventResults.find(r => r.eventId === event.id);
+      const segments = [...(currentER?.segments || [])];
+      segments.push({
+        segmentNumber: state.currentSegment + 1,
+        effort: roll.effort,
+        diceRoll: roll.dice,
+        time: roll.time,
+        staminaSpent: roll.staminaCost,
+      });
+
+      const totalTime = segments.reduce((sum, seg) => sum + seg.time, 0);
+      const roundedTime = Math.round(totalTime * 100) / 100;
+      const points = isComplete ? calculatePoints(event.id, roundedTime) : 0;
+
+      const attemptResult: AttemptResult = {
+        effort: roll.effort,
+        diceRoll: roll.dice,
+        rawResult: roll.result.raw,
+        resolvedResult: roll.result.numericValue ?? null,
+        displayResult: roll.result.displayValue,
+        isSpecial: roll.result.isSpecial,
+        specialType: roll.result.specialType,
+        staminaSpent: roll.staminaCost,
+      };
+
+      const eventResult: EventResult = {
+        eventId: event.id,
+        attempts: [...(currentER?.attempts || []), attemptResult],
+        bestResult: isComplete ? roundedTime : null,
+        bestResultDisplay: isComplete ? roundedTime.toFixed(2) : `${roundedTime.toFixed(2)} (${nextSegment}/${totalSegments})`,
+        points,
+        segments,
+      };
+
+      p.eventResults = [
+        ...p.eventResults.filter(r => r.eventId !== event.id),
+        eventResult,
+      ];
+      if (isComplete) {
+        p.totalPoints = p.eventResults.reduce((sum, r) => sum + r.points, 0);
+      }
+      updatedPlayers[pi] = p;
+    }
+
+    set({
+      players: updatedPlayers,
+      phase: 'msSplitReview',
+    });
   },
 
   resetGame: () => set(initialState),
