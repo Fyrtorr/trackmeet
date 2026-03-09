@@ -1,3 +1,4 @@
+import { useEffect, useState, useRef, useCallback } from 'react'
 import type { PlayerState } from '../../types'
 import { getAthleteGraphic } from '../../data/athleteGraphics'
 import './ThrowingFieldAnimation.css'
@@ -8,6 +9,8 @@ interface ThrowingFieldAnimationProps {
   eventId: string               // 'shot_put' | 'discus' | 'javelin'
   isSpecial: boolean
   showLanding: boolean          // delay showing landing until bottom animation completes
+  throwTrigger: number          // increments on each throw
+  onRunwayComplete?: () => void // fires after javelin runway animation
 }
 
 // ── Match oval track viewBox for consistent sizing ──
@@ -87,11 +90,55 @@ function landingAngle(result: number, config: EventConfig): number {
 }
 
 export function ThrowingFieldAnimation({
-  players, currentPlayerIndex, eventId, isSpecial, showLanding,
+  players, currentPlayerIndex, eventId, isSpecial, showLanding, throwTrigger, onRunwayComplete,
 }: ThrowingFieldAnimationProps) {
   const config = EVENT_CONFIGS[eventId] ?? EVENT_CONFIGS.discus
   const currentPlayer = players[currentPlayerIndex]
   const graphic = currentPlayer ? getAthleteGraphic(currentPlayer.athleteId) : null
+
+  // Javelin runway animation state
+  const [runnerY, setRunnerY] = useState<number | null>(null) // null = at rest position
+  const prevTriggerRef = useRef(throwTrigger)
+  const onRunwayCompleteRef = useRef(onRunwayComplete)
+  onRunwayCompleteRef.current = onRunwayComplete
+  const animRef = useRef<number | null>(null)
+
+  // Trigger runway run-up on throwTrigger change (javelin only)
+  useEffect(() => {
+    if (throwTrigger === prevTriggerRef.current) return
+    prevTriggerRef.current = throwTrigger
+    if (throwTrigger === 0) return
+
+    if (!config.hasRunway) {
+      // Non-javelin: no runway, fire immediately
+      onRunwayCompleteRef.current?.()
+      return
+    }
+
+    // Animate from bottom of runway to throw line
+    const startY = THROW_CY + config.runwayLen
+    const endY = THROW_CY
+    const duration = 800
+
+    const startTime = performance.now()
+    function animate(now: number) {
+      const t = Math.min(1, (now - startTime) / duration)
+      const ease = t < 0.5 ? 2 * t * t : 1 - 2 * (1 - t) * (1 - t) // ease-in-out
+      setRunnerY(startY + (endY - startY) * ease)
+      if (t < 1) {
+        animRef.current = requestAnimationFrame(animate)
+      } else {
+        setRunnerY(null) // back to default position at throw line
+        onRunwayCompleteRef.current?.()
+      }
+    }
+    setRunnerY(startY)
+    animRef.current = requestAnimationFrame(animate)
+    return () => { if (animRef.current) cancelAnimationFrame(animRef.current) }
+  }, [throwTrigger, config.hasRunway, config.runwayLen])
+
+  // Reset on player change
+  useEffect(() => { setRunnerY(null) }, [currentPlayerIndex])
 
   // Collect all landed marks
   // Hide the current player's latest attempt until the throw animation completes
@@ -304,20 +351,22 @@ export function ThrowingFieldAnimation({
           </g>
         )}
 
-        {/* ══ CURRENT ATHLETE AT CIRCLE ══ */}
+        {/* ══ CURRENT ATHLETE ══ */}
         {graphic && (
           <g>
             <circle
-              cx={THROW_CX} cy={THROW_CY} r={3.5}
+              cx={THROW_CX} cy={runnerY ?? THROW_CY} r={3.5}
               fill={graphic.color} stroke="white" strokeWidth={1}
             />
-            <text
-              x={THROW_CX} y={THROW_CY + config.circleRadius + 10}
-              textAnchor="middle" fill={graphic.color}
-              fontSize={6} fontWeight={700} fontFamily="'Consolas', monospace"
-            >
-              {graphic.abbreviation}
-            </text>
+            {runnerY === null && (
+              <text
+                x={THROW_CX} y={THROW_CY + config.circleRadius + 10}
+                textAnchor="middle" fill={graphic.color}
+                fontSize={6} fontWeight={700} fontFamily="'Consolas', monospace"
+              >
+                {graphic.abbreviation}
+              </text>
+            )}
           </g>
         )}
       </svg>

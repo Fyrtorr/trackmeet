@@ -14,16 +14,20 @@
 
 .effort-buttons {
   display: flex;
-  gap: 0.5rem;
+  flex-direction: column;
+  gap: 0.4rem;
+  width: 100%;
 }
 
 .effort-btn {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
-  padding: 0.6rem 1.2rem;
-  border-radius: 8px;
-  min-width: 90px;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.8rem;
+  border-radius: 6px;
+  width: 100%;
   transition: all 0.15s;
 }
 
@@ -35,7 +39,6 @@
 .effort-btn .effort-cost {
   font-size: 0.65rem;
   opacity: 0.7;
-  margin-top: 0.15rem;
 }
 
 .effort-safe {

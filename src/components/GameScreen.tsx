@@ -32,7 +32,9 @@ export function GameScreen() {
   const [jumpTrigger, setJumpTrigger] = useState(0)
   const [throwTrigger, setThrowTrigger] = useState(0)
   const [throwLanded, setThrowLanded] = useState(false)
+  const [runwayDone, setRunwayDone] = useState(true)
   const [heightJumpTrigger, setHeightJumpTrigger] = useState(0)
+  const [jumpAnimDone, setJumpAnimDone] = useState(true)
   const [showScorecard, setShowScorecard] = useState(false)
   const [heightAction, setHeightAction] = useState<'choosing' | 'attempting' | 'confirming-done'>('choosing')
 
@@ -114,10 +116,13 @@ export function GameScreen() {
     }
   }, [allPlayersRolled, isRolling, raceTriggered])
 
-  // Reset race state when event changes
+  // Reset animation state when event changes
   useEffect(() => {
     setRaceTriggered(false)
     setRaceComplete(false)
+    setJumpAnimDone(true)
+    setThrowLanded(false)
+    setRunwayDone(true)
   }, [state.currentEventIndex])
 
   // Reset height action when player, height, or phase changes back to choosing
@@ -125,9 +130,19 @@ export function GameScreen() {
     setHeightAction('choosing')
   }, [state.currentPlayerIndex, state.currentHeightIndex, state.phase])
 
+  // Auto-end height event if player can't afford any effort (0 stamina + fatigue)
+  useEffect(() => {
+    if (!isHeight || state.phase !== 'choosingEffort') return
+    const canAffordAny = state.canAffordEffort('safe') || state.canAffordEffort('avg') || state.canAffordEffort('allout')
+    if (!canAffordAny) {
+      state.doneJumping()
+    }
+  }, [isHeight, state.phase, state.currentPlayerIndex, state])
+
   const handleEffortSelect = useCallback((effort: EffortType) => {
     setChosenEffort(effort)
     setThrowLanded(false)
+    setJumpAnimDone(false)
     state.chooseEffort(effort)
     setIsRolling(true)
     state.performRoll()
@@ -148,9 +163,16 @@ export function GameScreen() {
       const sr = useGameStore.getState()
       const isFoul = sr.lastResult?.isSpecial ?? false
       setThrowLanded(isFoul) // fouls skip the flying animation
+      setRunwayDone(currentEventId !== 'javelin') // javelin waits for runway
       setThrowTrigger(t => t + 1)
     } else if (currentEventType === 'height') {
-      setHeightJumpTrigger(t => t + 1)
+      const sr = useGameStore.getState()
+      if (sr.lastResult?.numericValue == null) {
+        // Special result (FOUL, etc.) — no jump animation, immediately done
+        setJumpAnimDone(true)
+      } else {
+        setHeightJumpTrigger(t => t + 1)
+      }
     }
   }, [])
 
@@ -222,9 +244,11 @@ export function GameScreen() {
   const sprintRaceInProgress = isSprint && raceTriggered && !raceComplete
   const sprintWaitingForRace = isSprint && allPlayersRolled && !raceComplete
 
-  // For throwing events, delay showing advance/result until the throw animation finishes
+  // For throwing/height events, delay showing advance/result until the animation finishes
   const throwAnimDone = !isThrowingField || throwLanded
-  const showAdvance = (hasResult || isMsSplitReview) && !isRolling && !sprintWaitingForRace && !sprintRaceInProgress && throwAnimDone
+  const heightAnimDone = !isHeight || jumpAnimDone
+  const animDone = throwAnimDone && heightAnimDone
+  const showAdvance = (hasResult || isMsSplitReview) && !isRolling && !sprintWaitingForRace && !sprintRaceInProgress && animDone
   const isFieldEvent = event.type === 'field_throw' || event.type === 'field_jump'
   const isLastPlayer = state.currentPlayerIndex >= state.players.length - 1
   // For height events, check if all players are done
@@ -310,6 +334,8 @@ export function GameScreen() {
               eventId={event.id}
               isSpecial={state.lastResult?.isSpecial ?? false}
               showLanding={throwLanded}
+              throwTrigger={throwTrigger}
+              onRunwayComplete={() => setRunwayDone(true)}
             />
           </div>
           <div className="ms-right-side">
@@ -365,7 +391,7 @@ export function GameScreen() {
             </div>
           </div>
         </div>
-        {hasResult && !isRolling && !throwLanded && (
+        {hasResult && !isRolling && !throwLanded && runwayDone && (
           <FieldAnimation
             eventId={event.id}
             result={state.lastResult?.numericValue ?? null}
@@ -399,21 +425,135 @@ export function GameScreen() {
         )}
       </>)}
 
-      {/* Height event (high jump / pole vault) */}
+      {/* Height event (high jump / pole vault) — ms-style layout */}
       {isHeight && (
-        <div className="race-track-container">
-          <HeightAnimation
-            eventId={event.id}
-            players={state.players}
-            currentPlayerIndex={state.currentPlayerIndex}
-            currentHeightIndex={state.currentHeightIndex}
-            lastResultInches={state.lastResult?.numericValue ?? null}
-            cleared={state.lastResult?.numericValue != null && currentBarHeight
-              ? clearsHeight(state.lastResult.numericValue, currentBarHeight)
-              : null}
-            isSpecial={isSpecial}
-            jumpTrigger={heightJumpTrigger}
-          />
+        <div className="ms-top-row">
+          <div className="ms-chart-side">
+            <ChartDisplay
+              athlete={athlete}
+              eventId={event.id}
+              highlightDice={state.lastRoll?.total ?? null}
+              highlightEffort={chosenEffort}
+            />
+          </div>
+          <div className="ms-track-side">
+            <HeightAnimation
+              eventId={event.id}
+              players={state.players}
+              currentPlayerIndex={state.currentPlayerIndex}
+              currentHeightIndex={state.currentHeightIndex}
+              lastResultInches={state.lastResult?.numericValue ?? null}
+              cleared={state.lastResult?.numericValue != null && currentBarHeight
+                ? clearsHeight(state.lastResult.numericValue, currentBarHeight)
+                : null}
+              isSpecial={isSpecial}
+              jumpTrigger={heightJumpTrigger}
+              onJumpComplete={() => setJumpAnimDone(true)}
+            />
+          </div>
+          <div className="ms-right-side">
+            <div className="ms-scoreboard-side">
+              <EventScorecard
+                players={state.players}
+                event={event}
+                currentPlayerIndex={state.currentPlayerIndex}
+                heightList={heightList}
+                playerMaxHeights={playerMaxHeights}
+                hideLatestAttempt={!jumpAnimDone}
+              />
+            </div>
+            <div className="ms-controls-side">
+              <div className="player-badge" style={{ borderColor: getAthleteGraphic(player.athleteId).color }}>
+                {player.name}
+              </div>
+
+              {(() => {
+                const heightAttempts = currentResult?.heightProgression?.reduce(
+                  (sum, h) => sum + h.attempts.filter(a => a === 'O' || a === 'X').length, 0
+                ) ?? 0
+                const fatigued = heightAttempts >= FATIGUE_THRESHOLD
+                return (
+                  <div className={`height-fatigue ${fatigued ? 'active' : ''}`}>
+                    Attempts: {heightAttempts}
+                    {fatigued && <span className="fatigue-warn"> (+1 SP fatigue)</span>}
+                  </div>
+                )
+              })()}
+
+              {attemptDisplay && (
+                <div className="attempt-badge">{attemptDisplay}</div>
+              )}
+
+              <DiceDisplay
+                roll={state.lastRoll}
+                rolling={isRolling}
+                onRollComplete={handleRollComplete}
+              />
+
+              {showResultBox && jumpAnimDone && (
+                <div className={`result-display ${isSpecial ? 'special' : 'normal'}`}>
+                  <span className="result-label">Result</span>
+                  <span className="result-value">{lastResultDisplay}</span>
+                  {currentResult && currentResult.points > 0 && isEventDone && (
+                    <span className="result-points">{currentResult.points} pts</span>
+                  )}
+                </div>
+              )}
+
+              {isChoosingEffort && heightAction === 'choosing' && (
+                <div className="height-actions">
+                  <button className="primary height-btn" onClick={() => setHeightAction('attempting')}>
+                    Attempt {currentBarHeight}
+                  </button>
+                  <button className="height-btn height-pass" onClick={() => { state.passHeight(); }}>
+                    Pass
+                  </button>
+                  <button className="height-btn height-done" onClick={() => setHeightAction('confirming-done')}>
+                    Done Jumping
+                  </button>
+                </div>
+              )}
+
+              {isChoosingEffort && heightAction === 'confirming-done' && (() => {
+                const bestHeight = currentResult?.bestResultDisplay || 'No height cleared'
+                const pts = currentResult?.points ?? 0
+                return (
+                  <div className="height-confirm-done">
+                    <div className="height-confirm-title">Stop Jumping?</div>
+                    <div className="height-confirm-score">
+                      <span className="height-confirm-label">Best Height</span>
+                      <span className="height-confirm-value">{bestHeight}</span>
+                      <span className="height-confirm-pts">{pts} pts</span>
+                    </div>
+                    <div className="height-confirm-buttons">
+                      <button className="height-btn height-done" onClick={() => { state.doneJumping(); }}>
+                        Accept &amp; Stop
+                      </button>
+                      <button className="height-btn height-pass" onClick={() => setHeightAction('choosing')}>
+                        Go Back
+                      </button>
+                    </div>
+                  </div>
+                )
+              })()}
+
+              {isChoosingEffort && heightAction === 'attempting' && (
+                <EffortSelector
+                  onSelect={handleEffortSelect}
+                  disabled={isRolling}
+                  injuryInEffect={injuryActive}
+                  staminaRemaining={stamina}
+                  allOutCost={allOutCost}
+                />
+              )}
+
+              {showAdvance && (
+                <button className="primary advance-btn" onClick={handleAdvance}>
+                  {advanceLabel}
+                </button>
+              )}
+            </div>
+          </div>
         </div>
       )}
 
@@ -523,8 +663,8 @@ export function GameScreen() {
         </>
       )}
 
-      {!isMultiSegment && !isThrowingField && (
-        <div className={`game-body ${isHeight ? 'height-layout' : ''}`}>
+      {!isMultiSegment && !isThrowingField && !isHeight && (
+        <div className="game-body">
           <div className="game-left">
             <ChartDisplay
               athlete={athlete}
@@ -539,19 +679,6 @@ export function GameScreen() {
               {player.name}
             </div>
 
-            {isHeight && (() => {
-              const heightAttempts = currentResult?.heightProgression?.reduce(
-                (sum, h) => sum + h.attempts.filter(a => a === 'O' || a === 'X').length, 0
-              ) ?? 0
-              const fatigued = heightAttempts >= FATIGUE_THRESHOLD
-              return (
-                <div className={`height-fatigue ${fatigued ? 'active' : ''}`}>
-                  Attempts: {heightAttempts}
-                  {fatigued && <span className="fatigue-warn"> (+1 SP fatigue)</span>}
-                </div>
-              )
-            })()}
-
             {attemptDisplay && (
               <div className="attempt-badge">{attemptDisplay}</div>
             )}
@@ -561,18 +688,6 @@ export function GameScreen() {
               rolling={isRolling}
               onRollComplete={handleRollComplete}
             />
-
-            {hasResult && !isRolling && !isSpecial && !isSprint && !isLongJump && !isShotPut && (
-              <>
-                {(event.type === 'field_throw' || event.type === 'field_jump') && (
-                  <FieldAnimation
-                    eventId={event.id}
-                    result={state.lastResult?.numericValue ?? null}
-                    isSpecial={isSpecial}
-                  />
-                )}
-              </>
-            )}
 
             {showResultBox && (
               <div className={`result-display ${isSpecial ? 'special' : 'normal'}`}>
@@ -614,54 +729,7 @@ export function GameScreen() {
               </div>
             )}
 
-            {isChoosingEffort && !isHeight && (
-              <EffortSelector
-                onSelect={handleEffortSelect}
-                disabled={isRolling}
-                injuryInEffect={injuryActive}
-                staminaRemaining={stamina}
-                allOutCost={allOutCost}
-              />
-            )}
-
-            {isChoosingEffort && isHeight && heightAction === 'choosing' && (
-              <div className="height-actions">
-                <button className="primary height-btn" onClick={() => setHeightAction('attempting')}>
-                  Attempt {currentBarHeight}
-                </button>
-                <button className="height-btn height-pass" onClick={() => { state.passHeight(); }}>
-                  Pass
-                </button>
-                <button className="height-btn height-done" onClick={() => setHeightAction('confirming-done')}>
-                  Done Jumping
-                </button>
-              </div>
-            )}
-
-            {isChoosingEffort && isHeight && heightAction === 'confirming-done' && (() => {
-              const bestHeight = currentResult?.bestResultDisplay || 'No height cleared'
-              const pts = currentResult?.points ?? 0
-              return (
-                <div className="height-confirm-done">
-                  <div className="height-confirm-title">Stop Jumping?</div>
-                  <div className="height-confirm-score">
-                    <span className="height-confirm-label">Best Height</span>
-                    <span className="height-confirm-value">{bestHeight}</span>
-                    <span className="height-confirm-pts">{pts} pts</span>
-                  </div>
-                  <div className="height-confirm-buttons">
-                    <button className="height-btn height-done" onClick={() => { state.doneJumping(); }}>
-                      Accept &amp; Stop
-                    </button>
-                    <button className="height-btn height-pass" onClick={() => setHeightAction('choosing')}>
-                      Go Back
-                    </button>
-                  </div>
-                </div>
-              )
-            })()}
-
-            {isChoosingEffort && isHeight && heightAction === 'attempting' && (
+            {isChoosingEffort && (
               <EffortSelector
                 onSelect={handleEffortSelect}
                 disabled={isRolling}

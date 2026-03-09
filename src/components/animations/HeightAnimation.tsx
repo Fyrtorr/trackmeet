@@ -14,19 +14,24 @@ interface HeightAnimationProps {
   cleared: boolean | null
   isSpecial: boolean
   jumpTrigger: number
+  onJumpComplete?: () => void
 }
 
-// Max upright height is 8 feet = 96 inches
-const MAX_UPRIGHT_INCHES = 96
+// Max upright height: 8 feet for high jump, 21 feet for pole vault
+const HJ_MAX_INCHES = 96   // 8'
+const PV_MAX_INCHES = 252   // 21'
 
 export function HeightAnimation({
   eventId, players, currentPlayerIndex, currentHeightIndex,
-  lastResultInches, cleared, isSpecial, jumpTrigger,
+  lastResultInches, cleared, isSpecial, jumpTrigger, onJumpComplete,
 }: HeightAnimationProps) {
   const [phase, setPhase] = useState<'ready' | 'jumping' | 'result'>('ready')
   const prevTriggerRef = useRef(jumpTrigger)
+  const onJumpCompleteRef = useRef(onJumpComplete)
+  onJumpCompleteRef.current = onJumpComplete
 
   const isPoleVault = eventId === 'pole_vault'
+  const maxUprightInches = isPoleVault ? PV_MAX_INCHES : HJ_MAX_INCHES
   const heightList = isPoleVault ? POLE_VAULT_HEIGHTS : HIGH_JUMP_HEIGHTS
   const currentBarStr = heightList[currentHeightIndex] ?? heightList[0]
   const currentBarInches = parseFeetInches(currentBarStr) ?? 68
@@ -34,17 +39,31 @@ export function HeightAnimation({
   const currentPlayer = players[currentPlayerIndex]
   const graphic = currentPlayer ? getAthleteGraphic(currentPlayer.athleteId) : null
 
-  // Bar position as percentage of the upright (0% = bottom, 100% = top)
-  const barPercent = Math.min(100, (currentBarInches / MAX_UPRIGHT_INCHES) * 100)
+  // Bar position mapped to field coordinates
+  // Upright starts at 8% (ground) and spans 55% of field height
+  const GROUND_PCT = 8
+  const UPRIGHT_HEIGHT_PCT = 55
+  const barFraction = Math.min(1, currentBarInches / maxUprightInches)
+  const barPercent = GROUND_PCT + barFraction * UPRIGHT_HEIGHT_PCT
+  // Mat is 4 feet tall, scaled to the upright
+  const matHeightPct = (48 / maxUprightInches) * UPRIGHT_HEIGHT_PCT
 
   // Trigger jump animation
   useEffect(() => {
     if (jumpTrigger === prevTriggerRef.current) return
     prevTriggerRef.current = jumpTrigger
-    if (jumpTrigger === 0 || lastResultInches === null) return
+    if (jumpTrigger === 0) return
+    if (lastResultInches === null) {
+      // Special result (FOUL, etc.) — skip animation but still signal completion
+      onJumpCompleteRef.current?.()
+      return
+    }
 
     setPhase('jumping')
-    const t1 = setTimeout(() => setPhase('result'), 1400)
+    const t1 = setTimeout(() => {
+      setPhase('result')
+      onJumpCompleteRef.current?.()
+    }, 1400)
     return () => clearTimeout(t1)
   }, [jumpTrigger, lastResultInches])
 
@@ -63,7 +82,7 @@ export function HeightAnimation({
       <div className="hf-ground" />
 
       {/* Landing mat behind the bar */}
-      <div className="hf-mat" />
+      <div className="hf-mat" style={{ height: `${matHeightPct}%` }} />
 
       {/* Left upright */}
       <div className="hf-upright hf-upright-left">
@@ -71,7 +90,7 @@ export function HeightAnimation({
         {/* Height tick marks on upright */}
         {heightList.map((h, i) => {
           const inches = parseFeetInches(h) ?? 0
-          const pct = Math.min(100, (inches / MAX_UPRIGHT_INCHES) * 100)
+          const pct = Math.min(100, (inches / maxUprightInches) * 100)
           const isCurrent = i === currentHeightIndex
           return (
             <div
@@ -88,17 +107,23 @@ export function HeightAnimation({
         <div className="hf-upright-post" />
       </div>
 
+      {/* Height sign */}
+      <div className="hf-height-sign">
+        {currentBarStr}
+      </div>
+
       {/* Bar */}
       <div
         className={`hf-bar ${barKnocked ? 'knocked' : ''}`}
         style={{ bottom: `${barPercent}%` }}
       >
-        <span className="hf-bar-label">{currentBarStr}</span>
       </div>
 
       {/* Athlete approaching / jumping */}
       {graphic && showAthlete && (
-        <div className={`hf-athlete ${phase} ${cleared === true ? 'will-clear' : cleared === false ? 'will-miss' : ''}`}>
+        <div
+          className={`hf-athlete ${phase} ${cleared === true ? 'will-clear' : cleared === false ? 'will-miss' : ''}`}
+        >
           <span className="hf-athlete-figure">{isPoleVault ? '\u{1F3CB}' : '\u{1F3C3}'}</span>
         </div>
       )}
@@ -106,7 +131,7 @@ export function HeightAnimation({
       {/* Result badge */}
       {showResult && (
         <div className={`hf-result-badge ${cleared ? 'cleared' : 'missed'}`}>
-          {cleared ? 'O' : 'X'}
+          {cleared ? 'CLEAR!' : 'MISS!'}
         </div>
       )}
 

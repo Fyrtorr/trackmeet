@@ -9,6 +9,7 @@ interface EventScorecardProps {
   currentPlayerIndex: number
   heightList?: string[]
   playerMaxHeights?: Record<number, number>  // playerId -> max possible height in inches
+  hideLatestAttempt?: boolean  // hide the current player's latest attempt until animation completes
 }
 
 function inchesToDisplay(inches: number): string {
@@ -17,7 +18,7 @@ function inchesToDisplay(inches: number): string {
   return `${ft}' ${inn}"`
 }
 
-export function EventScorecard({ players, event, currentPlayerIndex, heightList = [], playerMaxHeights = {} }: EventScorecardProps) {
+export function EventScorecard({ players, event, currentPlayerIndex, heightList = [], playerMaxHeights = {}, hideLatestAttempt = false }: EventScorecardProps) {
   const isFieldEvent = event.type === 'field_throw' || event.type === 'field_jump'
   const isMultiSegment = event.type === 'multi_segment'
   const isHeight = event.type === 'height'
@@ -67,7 +68,15 @@ export function EventScorecard({ players, event, currentPlayerIndex, heightList 
 
                       const result = p.eventResults.find(r => r.eventId === event.id)
                       const hp = result?.heightProgression?.find(h => h.height === height)
-                      const attempts = hp?.attempts ?? []
+                      // If hiding latest attempt for current player, strip the last attempt
+                      // but only at the height they're currently attempting (the last in their progression)
+                      const isCurrentPlayer = players.indexOf(p) === currentPlayerIndex
+                      const rawAttempts = hp?.attempts ?? []
+                      const lastProgressionHeight = result?.heightProgression?.[result.heightProgression.length - 1]?.height
+                      const isCurrentHeight = height === lastProgressionHeight
+                      const attempts = (hideLatestAttempt && isCurrentPlayer && isCurrentHeight && rawAttempts.length > 0)
+                        ? rawAttempts.slice(0, -1)
+                        : rawAttempts
 
                       // Check if player is completely done (chose to stop or 3 consecutive misses)
                       let totalConsecMisses = 0
@@ -151,7 +160,7 @@ export function EventScorecard({ players, event, currentPlayerIndex, heightList 
                     PB: {inchesToDisplay(playerMaxHeights[p.id])}
                   </span>
                 )}
-                {result && result.bestResult !== null && (
+                {result && result.bestResult !== null && !(hideLatestAttempt && pi === currentPlayerIndex) && (
                   <span className="esc-ht-status-best">
                     {result.bestResultDisplay}
                     {result.points > 0 && <span className="esc-pts"> ({result.points})</span>}

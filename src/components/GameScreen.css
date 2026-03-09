@@ -113,12 +113,13 @@
   display: flex;
   gap: 0.5rem;
   padding: 0.4rem 1.5rem 0;
-  align-items: start;
+  align-items: stretch;
 }
 
 .ms-track-side {
-  flex: 0 1 50%;
+  flex: 1 1 auto;
   min-width: 0;
+  align-self: stretch;
 }
 
 .ms-chart-side {
@@ -130,13 +131,13 @@
   overflow-y: visible;
 }
 
-/* Right column: scoreboard stacked above controls */
+/* Right area: scoreboard + controls side by side */
 .ms-right-side {
   display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
+  flex-direction: row;
+  gap: 0.5rem;
   flex: 0 0 auto;
-  min-width: 280px;
+  align-items: start;
 }
 
 .ms-scoreboard-side {
@@ -148,6 +149,11 @@
   flex-direction: column;
   align-items: center;
   gap: 0.75rem;
+  flex: 0 0 250px;
+  width: 250px;
+  min-width: 250px;
+  max-width: 250px;
+  overflow: hidden;
 }
 
 
