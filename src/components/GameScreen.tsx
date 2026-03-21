@@ -38,6 +38,7 @@ export function GameScreen() {
   const [showScorecard, setShowScorecard] = useState(false)
   const [heightAction, setHeightAction] = useState<'choosing' | 'attempting' | 'confirming-done'>('choosing')
   const [awaitingMsContinue, setAwaitingMsContinue] = useState(false)
+  const [msDisplayPlayerIndex, setMsDisplayPlayerIndex] = useState<number | null>(null)
 
   const event = EVENTS[state.currentEventIndex]
   const player = state.players[state.currentPlayerIndex]
@@ -125,6 +126,7 @@ export function GameScreen() {
     setThrowLanded(false)
     setRunwayDone(true)
     setAwaitingMsContinue(false)
+    setMsDisplayPlayerIndex(null)
   }, [state.currentEventIndex])
 
   // Reset height action when player, height, or phase changes back to choosing
@@ -194,6 +196,7 @@ export function GameScreen() {
   }, [state])
 
   const handleMsRoll = useCallback(() => {
+    setMsDisplayPlayerIndex(state.msRollingPlayerIndex)
     setIsRolling(true)
     state.msPerformRoll()
   }, [state])
@@ -304,8 +307,8 @@ export function GameScreen() {
           </button>
           <div className="player-turn">
             <span className="turn-label">Current Player</span>
-            <span className="turn-name">{player.name}</span>
-            <span className="turn-athlete">{athlete.name}</span>
+            <span className="turn-name">{(isMultiSegment && msDisplayPlayerIndex != null ? state.players[msDisplayPlayerIndex]?.name : player.name)}</span>
+            <span className="turn-athlete">{(isMultiSegment && msDisplayPlayerIndex != null ? athletes[state.players[msDisplayPlayerIndex]?.athleteId]?.name : athlete.name)}</span>
           </div>
         </div>
       </div>
@@ -579,8 +582,14 @@ export function GameScreen() {
       )}
 
       {/* Oval track for multi-segment events (400m, 1500m) */}
-      {isMultiSegment && (
-        <>
+      {isMultiSegment && (() => {
+        const msPlayerIdx = msDisplayPlayerIndex ?? state.currentPlayerIndex
+        const msPlayer = state.players[msPlayerIdx]
+        const msAthlete = msPlayer ? athletes[msPlayer.athleteId] : null
+        if (!msPlayer || !msAthlete) return null
+        const msStamina = event.day === 1 ? msPlayer.staminaDay1 : msPlayer.staminaDay2
+        const msInjuryActive = msPlayer.injuryInEffect !== null
+        return (
           <div className="ms-layout">
             <div className="ms-track-row">
               <OvalTrackAnimation
@@ -598,7 +607,7 @@ export function GameScreen() {
             <div className="ms-bottom-row">
               <div className="ms-chart-side">
                 <ChartDisplay
-                  athlete={athlete}
+                  athlete={msAthlete}
                   eventId={event.id}
                   highlightDice={state.lastRoll?.total ?? null}
                   highlightEffort={chosenEffort}
@@ -614,8 +623,8 @@ export function GameScreen() {
                 />
               </div>
               <div className="ms-controls-side">
-                <div className="player-badge" style={{ borderColor: getAthleteGraphic(player.athleteId).color }}>
-                  {player.name}
+                <div className="player-badge" style={{ borderColor: getAthleteGraphic(msPlayer.athleteId).color }}>
+                  {msPlayer.name}
                 </div>
 
                 {attemptDisplay && (
@@ -632,8 +641,8 @@ export function GameScreen() {
                   <EffortSelector
                     onSelect={handleMsEffortSelect}
                     disabled={false}
-                    injuryInEffect={injuryActive}
-                    staminaRemaining={stamina}
+                    injuryInEffect={msInjuryActive}
+                    staminaRemaining={msStamina}
                     allOutCost={allOutCost}
                   />
                 )}
@@ -653,7 +662,10 @@ export function GameScreen() {
                 )}
 
                 {awaitingMsContinue && isMsRolling && !isRolling && (
-                  <button className="primary advance-btn" onClick={() => setAwaitingMsContinue(false)}>
+                  <button className="primary advance-btn" onClick={() => {
+                    setAwaitingMsContinue(false)
+                    setMsDisplayPlayerIndex(null)
+                  }}>
                     Continue
                   </button>
                 )}
@@ -672,8 +684,8 @@ export function GameScreen() {
               </div>
             </div>
           </div>
-        </>
-      )}
+        )
+      })()}
 
       {!isMultiSegment && !isThrowingField && !isHeight && (
         <div className="game-body">
