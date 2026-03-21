@@ -581,16 +581,8 @@ export function GameScreen() {
       {/* Oval track for multi-segment events (400m, 1500m) */}
       {isMultiSegment && (
         <>
-          <div className="ms-top-row">
-            <div className="ms-chart-side">
-              <ChartDisplay
-                athlete={athlete}
-                eventId={event.id}
-                highlightDice={state.lastRoll?.total ?? null}
-                highlightEffort={chosenEffort}
-              />
-            </div>
-            <div className="ms-track-side">
+          <div className="ms-layout">
+            <div className="ms-track-row">
               <OvalTrackAnimation
                 players={state.players}
                 eventId={event.id}
@@ -603,7 +595,15 @@ export function GameScreen() {
                 onAnimationComplete={handleMsAnimationComplete}
               />
             </div>
-            <div className="ms-right-side">
+            <div className="ms-bottom-row">
+              <div className="ms-chart-side">
+                <ChartDisplay
+                  athlete={athlete}
+                  eventId={event.id}
+                  highlightDice={state.lastRoll?.total ?? null}
+                  highlightEffort={chosenEffort}
+                />
+              </div>
               <div className="ms-scoreboard-side">
                 <SplitScoreboard
                   players={state.players}

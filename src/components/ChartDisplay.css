@@ -6,6 +6,16 @@
   font-family: 'Consolas', 'Courier New', monospace;
 }
 
+.chart-athlete-name {
+  text-align: center;
+  font-size: 0.8rem;
+  font-weight: 700;
+  padding: 4px 6px 2px;
+  color: #e0e6f0;
+  background: #1a1f2e;
+  letter-spacing: 0.04em;
+}
+
 .chart-header {
   display: flex;
   align-items: center;

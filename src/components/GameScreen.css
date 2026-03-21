@@ -108,7 +108,7 @@
   grid-template-columns: 240px 1fr auto;
 }
 
-/* Multi-segment top row: track + chart alongside */
+/* Shared side-by-side row used by throwing field & height events */
 .ms-top-row {
   display: flex;
   gap: 0.5rem;
@@ -116,10 +116,43 @@
   align-items: stretch;
 }
 
-.ms-track-side {
+.ms-top-row .ms-track-side {
   flex: 1 1 auto;
   min-width: 0;
   align-self: stretch;
+}
+
+.ms-top-row .ms-right-side {
+  display: flex;
+  flex-direction: row;
+  gap: 0.5rem;
+  flex: 0 0 auto;
+  align-items: start;
+}
+
+.ms-top-row .ms-controls-side {
+  flex: 0 0 250px;
+  width: 250px;
+  min-width: 250px;
+  max-width: 250px;
+}
+
+/* Multi-segment layout: track on top, chart + scoreboard + controls below */
+.ms-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.4rem 1.5rem 0;
+}
+
+.ms-track-row {
+  width: 100%;
+}
+
+.ms-bottom-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: start;
 }
 
 .ms-chart-side {
@@ -131,15 +164,6 @@
   overflow-y: visible;
 }
 
-/* Right area: scoreboard + controls side by side */
-.ms-right-side {
-  display: flex;
-  flex-direction: row;
-  gap: 0.5rem;
-  flex: 0 0 auto;
-  align-items: start;
-}
-
 .ms-scoreboard-side {
   flex: 0 0 auto;
 }
@@ -149,10 +173,9 @@
   flex-direction: column;
   align-items: center;
   gap: 0.75rem;
-  flex: 0 0 250px;
-  width: 250px;
-  min-width: 250px;
-  max-width: 250px;
+  flex: 1 1 auto;
+  min-width: 200px;
+  max-width: 300px;
   overflow: hidden;
 }
 

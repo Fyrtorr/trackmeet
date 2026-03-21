@@ -43,6 +43,7 @@ export function ChartDisplay({ athlete, eventId, highlightDice, highlightEffort 
 
   return (
     <div className="chart-display">
+      <div className="chart-athlete-name">{athlete.name}</div>
       <div className="chart-header">
         {event && <span className="chart-event-number">{event.order}</span>}
         <span className="chart-event-name">{event?.name ?? eventId}</span>
