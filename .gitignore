@@ -25,3 +25,6 @@ dist-ssr
 
 # Research materials (binary files)
 research/
+
+# Claude Code
+.claude/

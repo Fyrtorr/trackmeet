@@ -37,6 +37,7 @@ export function GameScreen() {
   const [jumpAnimDone, setJumpAnimDone] = useState(true)
   const [showScorecard, setShowScorecard] = useState(false)
   const [heightAction, setHeightAction] = useState<'choosing' | 'attempting' | 'confirming-done'>('choosing')
+  const [awaitingMsContinue, setAwaitingMsContinue] = useState(false)
 
   const event = EVENTS[state.currentEventIndex]
   const player = state.players[state.currentPlayerIndex]
@@ -123,6 +124,7 @@ export function GameScreen() {
     setJumpAnimDone(true)
     setThrowLanded(false)
     setRunwayDone(true)
+    setAwaitingMsContinue(false)
   }, [state.currentEventIndex])
 
   // Reset height action when player, height, or phase changes back to choosing
@@ -198,6 +200,10 @@ export function GameScreen() {
 
   const handleMsRollComplete = useCallback(() => {
     setIsRolling(false)
+    const s = useGameStore.getState()
+    if (s.phase === 'msRolling') {
+      setAwaitingMsContinue(true)
+    }
   }, [])
 
   const handleMsAnimationComplete = useCallback(() => {
@@ -269,7 +275,7 @@ export function GameScreen() {
 
   const msComplete = isMultiSegment && isMsSplitReview && state.currentSegment + 1 >= (event.segments ?? 0)
   const isEventDone = (
-    event.type === 'sprint' ||
+    (isSprint && allPlayersRolled && raceComplete) ||
     isFieldEvent && state.currentAttempt >= 2 && isLastPlayer ||
     msComplete ||
     allHeightPlayersDone ||
@@ -619,7 +625,7 @@ export function GameScreen() {
                 <DiceDisplay
                   roll={state.lastRoll}
                   rolling={isRolling}
-                  onRollComplete={handleRollComplete}
+                  onRollComplete={handleMsRollComplete}
                 />
 
                 {isMsEffortPicking && (
@@ -646,7 +652,13 @@ export function GameScreen() {
                   <div className="ms-animating-label">Racing...</div>
                 )}
 
-                {isMsRolling && state.msRollingPlayerIndex === state.currentPlayerIndex && !isRolling && (
+                {awaitingMsContinue && isMsRolling && !isRolling && (
+                  <button className="primary advance-btn" onClick={() => setAwaitingMsContinue(false)}>
+                    Continue
+                  </button>
+                )}
+
+                {!awaitingMsContinue && isMsRolling && state.msRollingPlayerIndex === state.currentPlayerIndex && !isRolling && (
                   <button className="primary advance-btn" onClick={handleMsRoll}>
                     Roll
                   </button>
