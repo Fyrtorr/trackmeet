@@ -614,8 +614,8 @@ export function GameScreen() {
                 <ChartDisplay
                   athlete={msAthlete}
                   eventId={event.id}
-                  highlightDice={state.lastRoll?.total ?? null}
-                  highlightEffort={chosenEffort}
+                  highlightDice={msDisplayPlayerIndex != null ? (state.lastRoll?.total ?? null) : null}
+                  highlightEffort={msDisplayPlayerIndex != null ? chosenEffort : null}
                 />
               </div>
               <div className="ms-scoreboard-side">
