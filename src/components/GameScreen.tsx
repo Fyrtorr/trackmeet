@@ -596,20 +596,7 @@ export function GameScreen() {
         const msInjuryActive = msPlayer.injuryInEffect !== null
         return (
           <div className="ms-layout">
-            <div className="ms-track-row">
-              <OvalTrackAnimation
-                players={state.players}
-                eventId={event.id}
-                currentSegment={state.currentSegment}
-                totalSegments={event.segments ?? 4}
-                phase={state.phase}
-                pendingTimes={Object.fromEntries(
-                  Object.entries(state.msSegmentRolls).map(([k, v]) => [k, v.time])
-                )}
-                onAnimationComplete={handleMsAnimationComplete}
-              />
-            </div>
-            <div className="ms-bottom-row">
+            <div className="ms-top-row">
               <div className="ms-chart-side">
                 <ChartDisplay
                   athlete={msAthlete}
@@ -618,13 +605,17 @@ export function GameScreen() {
                   highlightEffort={msDisplayPlayerIndex != null ? chosenEffort : null}
                 />
               </div>
-              <div className="ms-scoreboard-side">
-                <SplitScoreboard
+              <div className="ms-track-side">
+                <OvalTrackAnimation
                   players={state.players}
-                  event={event}
-                  currentPlayerIndex={state.currentPlayerIndex}
+                  eventId={event.id}
                   currentSegment={state.currentSegment}
+                  totalSegments={event.segments ?? 4}
                   phase={state.phase}
+                  pendingTimes={Object.fromEntries(
+                    Object.entries(state.msSegmentRolls).map(([k, v]) => [k, v.time])
+                  )}
+                  onAnimationComplete={handleMsAnimationComplete}
                 />
               </div>
               <div className="ms-controls-side">
@@ -687,6 +678,15 @@ export function GameScreen() {
                   </button>
                 )}
               </div>
+            </div>
+            <div className="ms-bottom-row">
+              <SplitScoreboard
+                players={state.players}
+                event={event}
+                currentPlayerIndex={state.currentPlayerIndex}
+                currentSegment={state.currentSegment}
+                phase={state.phase}
+              />
             </div>
           </div>
         )
