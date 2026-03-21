@@ -154,52 +154,58 @@ export function GameScreen() {
     state.performRoll()
   }, [state])
 
+  // Play crowd reaction sounds based on the current lastResult
+  const playResultSound = useCallback(() => {
+    const result = useGameStore.getState().lastResult
+    if (!result) return
+    const st = result.specialType
+    if (st === 'FOUL' || st === 'FS' || st === 'FS?') {
+      audioManager.playWhistle()
+      if (st === 'FOUL') setTimeout(() => audioManager.playCrowdGroan(), 300)
+    } else if (st && st.startsWith('INJ')) {
+      audioManager.playCrowdGasp()
+    } else if (st === 'NG') {
+      audioManager.playCrowdGroan()
+    } else if (!result.isSpecial) {
+      audioManager.playCrowdCheer()
+    }
+  }, [])
+
   const handleRollComplete = useCallback(() => {
     setIsRolling(false)
     const s = useGameStore.getState()
     const currentEventId = EVENTS[s.currentEventIndex]?.id
     const currentEventType = EVENTS[s.currentEventIndex]?.type
 
-    // Play result sounds
-    const result = s.lastResult
-    if (result) {
-      const st = result.specialType
-      if (st === 'FOUL' || st === 'FS' || st === 'FS?') {
-        audioManager.playWhistle()
-        if (st === 'FOUL') {
-          setTimeout(() => audioManager.playCrowdGroan(), 300)
-        }
-      } else if (st && st.startsWith('INJ')) {
-        audioManager.playCrowdGasp()
-      } else if (st === 'NG') {
-        audioManager.playCrowdGroan()
-      } else if (!result.isSpecial) {
-        audioManager.playCrowdCheer()
-      }
-    }
-
     if (currentEventType === 'multi_segment') {
       // ms roll complete — dice animation done, no further action needed
       return
     }
     if (currentEventId === 'long_jump') {
+      // Foul → no animation (lastResult is null), play sound immediately
+      if (s.lastResult?.isSpecial) {
+        playResultSound()
+      }
       setJumpTrigger(t => t + 1)
     } else if (currentEventId === 'shot_put' || currentEventId === 'discus' || currentEventId === 'javelin') {
-      const sr = useGameStore.getState()
-      const isFoul = sr.lastResult?.isSpecial ?? false
-      setThrowLanded(isFoul) // fouls skip the flying animation
+      const isFoul = s.lastResult?.isSpecial ?? false
+      if (isFoul) {
+        // Fouls skip the flying animation — play sound immediately
+        playResultSound()
+      }
+      setThrowLanded(isFoul)
       setRunwayDone(currentEventId !== 'javelin') // javelin waits for runway
       setThrowTrigger(t => t + 1)
     } else if (currentEventType === 'height') {
-      const sr = useGameStore.getState()
-      if (sr.lastResult?.numericValue == null) {
-        // Special result (FOUL, etc.) — no jump animation, immediately done
+      if (s.lastResult?.numericValue == null) {
+        // Special result (FOUL, etc.) — no jump animation, play sound immediately
+        playResultSound()
         setJumpAnimDone(true)
       } else {
         setHeightJumpTrigger(t => t + 1)
       }
     }
-  }, [])
+  }, [playResultSound])
 
   const handleAdvance = useCallback(() => {
     setChosenEffort(null)
@@ -209,6 +215,7 @@ export function GameScreen() {
 
   const handleRaceComplete = useCallback(() => {
     setRaceComplete(true)
+    audioManager.playCrowdCheer()
   }, [])
 
   // Multi-segment handlers
@@ -229,21 +236,6 @@ export function GameScreen() {
     setIsRolling(false)
     const s = useGameStore.getState()
 
-    // Play result sounds for ms rolls
-    const result = s.lastResult
-    if (result) {
-      const st = result.specialType
-      if (st === 'FOUL' || st === 'FS' || st === 'FS?') {
-        audioManager.playWhistle()
-      } else if (st && st.startsWith('INJ')) {
-        audioManager.playCrowdGasp()
-      } else if (st === 'NG') {
-        audioManager.playCrowdGroan()
-      } else if (!result.isSpecial) {
-        audioManager.playCrowdCheer()
-      }
-    }
-
     if (s.phase === 'msRolling') {
       setAwaitingMsContinue(true)
     } else {
@@ -253,8 +245,9 @@ export function GameScreen() {
   }, [])
 
   const handleMsAnimationComplete = useCallback(() => {
+    playResultSound()
     state.msAnimationComplete()
-  }, [state])
+  }, [state, playResultSound])
 
   const handleInjuryReroll = useCallback(() => {
     setIsRolling(true)
@@ -492,7 +485,7 @@ export function GameScreen() {
               }
               return best
             })()}
-            onComplete={() => setThrowLanded(true)}
+            onComplete={() => { setThrowLanded(true); playResultSound() }}
           />
         )}
       </>)}
@@ -520,7 +513,7 @@ export function GameScreen() {
                 : null}
               isSpecial={isSpecial}
               jumpTrigger={heightJumpTrigger}
-              onJumpComplete={() => setJumpAnimDone(true)}
+              onJumpComplete={() => { setJumpAnimDone(true); playResultSound() }}
             />
           </div>
           <div className="ms-right-side">
@@ -646,6 +639,7 @@ export function GameScreen() {
             lastResultDisplay={state.lastResult?.displayValue ?? ''}
             isSpecial={state.lastResult?.isSpecial ?? false}
             jumpTrigger={jumpTrigger}
+            onLandingComplete={playResultSound}
           />
         </div>
       )}

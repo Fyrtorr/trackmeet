@@ -11,6 +11,7 @@ interface LongJumpPitProps {
   lastResultDisplay: string
   isSpecial: boolean
   jumpTrigger: number            // increment to trigger a new jump animation
+  onLandingComplete?: () => void // fired when the jump lands
 }
 
 // Long jump range in inches for the pit scale
@@ -26,7 +27,7 @@ function inchesToDisplay(inches: number): string {
   return `${ft}'${inc}"`
 }
 
-export function LongJumpPit({ players, currentPlayerIndex, eventId, lastResult, lastResultDisplay, isSpecial, jumpTrigger }: LongJumpPitProps) {
+export function LongJumpPit({ players, currentPlayerIndex, eventId, lastResult, lastResultDisplay, isSpecial, jumpTrigger, onLandingComplete }: LongJumpPitProps) {
   const [phase, setPhase] = useState<'ready' | 'running' | 'jumping' | 'landed'>('ready')
   const prevTriggerRef = useRef(jumpTrigger)
 
@@ -62,13 +63,16 @@ export function LongJumpPit({ players, currentPlayerIndex, eventId, lastResult, 
 
     setPhase('running')
     const t1 = setTimeout(() => setPhase('jumping'), 1400)
-    const t2 = setTimeout(() => setPhase('landed'), 4200)
+    const t2 = setTimeout(() => {
+      setPhase('landed')
+      onLandingComplete?.()
+    }, 4200)
 
     return () => {
       clearTimeout(t1)
       clearTimeout(t2)
     }
-  }, [jumpTrigger, lastResult])
+  }, [jumpTrigger, lastResult, onLandingComplete])
 
   // Reset to ready when player changes (between attempts or players)
   useEffect(() => {
