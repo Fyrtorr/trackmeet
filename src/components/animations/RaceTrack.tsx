@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react'
 import type { PlayerState } from '../../types'
 import { getAthleteGraphic } from '../../data/athleteGraphics'
-import { playGunshot } from '../../audio/sounds'
+import { audioManager } from '../../audio/audioManager'
 import './RaceTrack.css'
 
 interface RaceTrackProps {
@@ -61,7 +61,7 @@ export function RaceTrack({ players, eventId, triggerRace, onRaceComplete }: Rac
     setRacePhase('set')
 
     const gunTimer = setTimeout(() => {
-      playGunshot()
+      audioManager.playGunshot()
       setRacePhase('racing')
     }, 800)
 

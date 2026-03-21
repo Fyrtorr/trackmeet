@@ -15,6 +15,7 @@ import { LongJumpPit } from './animations/LongJumpPit'
 import { ShotPutRing } from './animations/ShotPutRing'
 import { ThrowingFieldAnimation } from './animations/ThrowingFieldAnimation'
 import { SplitScoreboard } from './SplitScoreboard'
+import { audioManager } from '../audio/audioManager'
 import { clearsHeight, parseFeetInches } from '../game/chartLookup'
 import { getAthleteGraphic } from '../data/athleteGraphics'
 import athleteData from '../data/athletes.json'
@@ -149,6 +150,7 @@ export function GameScreen() {
     setJumpAnimDone(false)
     state.chooseEffort(effort)
     setIsRolling(true)
+    audioManager.playDiceRattle()
     state.performRoll()
   }, [state])
 
@@ -157,6 +159,25 @@ export function GameScreen() {
     const s = useGameStore.getState()
     const currentEventId = EVENTS[s.currentEventIndex]?.id
     const currentEventType = EVENTS[s.currentEventIndex]?.type
+
+    // Play result sounds
+    const result = s.lastResult
+    if (result) {
+      const st = result.specialType
+      if (st === 'FOUL' || st === 'FS' || st === 'FS?') {
+        audioManager.playWhistle()
+        if (st === 'FOUL') {
+          setTimeout(() => audioManager.playCrowdGroan(), 300)
+        }
+      } else if (st && st.startsWith('INJ')) {
+        audioManager.playCrowdGasp()
+      } else if (st === 'NG') {
+        audioManager.playCrowdGroan()
+      } else if (!result.isSpecial) {
+        audioManager.playCrowdCheer()
+      }
+    }
+
     if (currentEventType === 'multi_segment') {
       // ms roll complete — dice animation done, no further action needed
       return
@@ -200,12 +221,29 @@ export function GameScreen() {
     const s = useGameStore.getState()
     setMsDisplayPlayerIndex(s.msRollingPlayerIndex)
     setIsRolling(true)
+    audioManager.playDiceRattle()
     s.msPerformRoll()
   }, [])
 
   const handleMsRollComplete = useCallback(() => {
     setIsRolling(false)
     const s = useGameStore.getState()
+
+    // Play result sounds for ms rolls
+    const result = s.lastResult
+    if (result) {
+      const st = result.specialType
+      if (st === 'FOUL' || st === 'FS' || st === 'FS?') {
+        audioManager.playWhistle()
+      } else if (st && st.startsWith('INJ')) {
+        audioManager.playCrowdGasp()
+      } else if (st === 'NG') {
+        audioManager.playCrowdGroan()
+      } else if (!result.isSpecial) {
+        audioManager.playCrowdCheer()
+      }
+    }
+
     if (s.phase === 'msRolling') {
       setAwaitingMsContinue(true)
     } else {
@@ -216,6 +254,12 @@ export function GameScreen() {
 
   const handleMsAnimationComplete = useCallback(() => {
     state.msAnimationComplete()
+  }, [state])
+
+  const handleInjuryReroll = useCallback(() => {
+    setIsRolling(true)
+    audioManager.playDiceRattle()
+    state.injuryReroll()
   }, [state])
 
   if (!event || !player || !athlete) return null
@@ -293,10 +337,11 @@ export function GameScreen() {
 
   const lastResultDisplay = state.lastResult?.displayValue ?? ''
   const isSpecial = state.lastResult?.isSpecial ?? false
+  const injuryPending = state.injuryRerollPending
   // Don't show result box for height pass/done (no dice rolled)
   // Show result box after a roll completes (including ms rolling/split review phases)
   const msHasRoll = (isMsRolling || isMsSplitReview) && state.lastRoll !== null
-  const showResultBox = ((hasResult || msHasRoll) && !isRolling && !(isSprint && raceTriggered) && state.lastRoll !== null)
+  const showResultBox = ((hasResult || msHasRoll || injuryPending !== null) && !isRolling && !(isSprint && raceTriggered) && state.lastRoll !== null)
 
   return (
     <div className="game-screen">
@@ -307,6 +352,13 @@ export function GameScreen() {
           <span className="event-number">Event {event.order} of 10</span>
         </div>
         <div className="header-right">
+          <button
+            className="mute-btn"
+            onClick={() => state.updateSettings({ soundEnabled: !state.settings.soundEnabled })}
+            title={state.settings.soundEnabled ? 'Mute sounds' : 'Unmute sounds'}
+          >
+            {state.settings.soundEnabled ? '\u{1F50A}' : '\u{1F507}'}
+          </button>
           <button className="scorecard-btn" onClick={() => setShowScorecard(true)}>
             Scorecard
           </button>
@@ -379,7 +431,7 @@ export function GameScreen() {
 
               {showResultBox && throwAnimDone && (
                 <div className={`result-display ${isSpecial ? 'special' : 'normal'}`}>
-                  <span className="result-label">Result</span>
+                  <span className="result-label">{injuryPending ? 'INJ Re-Roll' : 'Result'}</span>
                   <span className="result-value">{lastResultDisplay}</span>
                   {currentResult && currentResult.points > 0 && isEventDone && (
                     <span className="result-points">{currentResult.points} pts</span>
@@ -397,7 +449,13 @@ export function GameScreen() {
                 />
               )}
 
-              {showAdvance && (
+              {injuryPending && !injuryPending.isMultiSegment && !isRolling && (
+                <button className="primary advance-btn" onClick={handleInjuryReroll}>
+                  Roll
+                </button>
+              )}
+
+              {showAdvance && !injuryPending && (
                 <button className="primary advance-btn" onClick={handleAdvance}>
                   {advanceLabel}
                 </button>
@@ -506,7 +564,7 @@ export function GameScreen() {
 
               {showResultBox && jumpAnimDone && (
                 <div className={`result-display ${isSpecial ? 'special' : 'normal'}`}>
-                  <span className="result-label">Result</span>
+                  <span className="result-label">{injuryPending ? 'INJ Re-Roll' : 'Result'}</span>
                   <span className="result-value">{lastResultDisplay}</span>
                   {currentResult && currentResult.points > 0 && isEventDone && (
                     <span className="result-points">{currentResult.points} pts</span>
@@ -561,7 +619,13 @@ export function GameScreen() {
                 />
               )}
 
-              {showAdvance && (
+              {injuryPending && !injuryPending.isMultiSegment && !isRolling && (
+                <button className="primary advance-btn" onClick={handleInjuryReroll}>
+                  Roll
+                </button>
+              )}
+
+              {showAdvance && !injuryPending && (
                 <button className="primary advance-btn" onClick={handleAdvance}>
                   {advanceLabel}
                 </button>
@@ -645,7 +709,7 @@ export function GameScreen() {
 
                 {showResultBox && (
                   <div className={`result-display ${isSpecial ? 'special' : 'normal'}`}>
-                    <span className="result-label">Result</span>
+                    <span className="result-label">{injuryPending ? 'INJ Re-Roll' : 'Result'}</span>
                     <span className="result-value">{lastResultDisplay}</span>
                     {currentResult && currentResult.points > 0 && isEventDone && (
                       <span className="result-points">{currentResult.points} pts</span>
@@ -657,7 +721,13 @@ export function GameScreen() {
                   <div className="ms-animating-label">Racing...</div>
                 )}
 
-                {awaitingMsContinue && isMsRolling && !isRolling && (
+                {injuryPending?.isMultiSegment && !isRolling && (
+                  <button className="primary advance-btn" onClick={handleInjuryReroll}>
+                    Roll
+                  </button>
+                )}
+
+                {!injuryPending && awaitingMsContinue && isMsRolling && !isRolling && (
                   <button className="primary advance-btn" onClick={() => {
                     setAwaitingMsContinue(false)
                     setMsDisplayPlayerIndex(null)
@@ -666,13 +736,13 @@ export function GameScreen() {
                   </button>
                 )}
 
-                {!awaitingMsContinue && isMsRolling && state.msRollingPlayerIndex === state.currentPlayerIndex && !isRolling && (
+                {!injuryPending && !awaitingMsContinue && isMsRolling && state.msRollingPlayerIndex === state.currentPlayerIndex && !isRolling && (
                   <button className="primary advance-btn" onClick={handleMsRoll}>
                     Roll
                   </button>
                 )}
 
-                {showAdvance && (
+                {showAdvance && !injuryPending && (
                   <button className="primary advance-btn" onClick={handleAdvance}>
                     {advanceLabel}
                   </button>
@@ -720,7 +790,7 @@ export function GameScreen() {
 
             {showResultBox && (
               <div className={`result-display ${isSpecial ? 'special' : 'normal'}`}>
-                <span className="result-label">Result</span>
+                <span className="result-label">{injuryPending ? 'INJ Re-Roll' : 'Result'}</span>
                 <span className="result-value">{lastResultDisplay}</span>
                 {currentResult && currentResult.points > 0 && isEventDone && (
                   <span className="result-points">{currentResult.points} pts</span>
@@ -768,7 +838,13 @@ export function GameScreen() {
               />
             )}
 
-            {showAdvance && (
+            {injuryPending && !injuryPending.isMultiSegment && !isRolling && (
+              <button className="primary advance-btn" onClick={handleInjuryReroll}>
+                Roll
+              </button>
+            )}
+
+            {showAdvance && !injuryPending && (
               <button className="primary advance-btn" onClick={handleAdvance}>
                 {advanceLabel}
               </button>
