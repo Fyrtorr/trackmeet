@@ -182,6 +182,7 @@ export function GameScreen() {
 
   const handleAdvance = useCallback(() => {
     setChosenEffort(null)
+    setMsDisplayPlayerIndex(null)
     state.advanceGame()
   }, [state])
 
@@ -196,16 +197,20 @@ export function GameScreen() {
   }, [state])
 
   const handleMsRoll = useCallback(() => {
-    setMsDisplayPlayerIndex(state.msRollingPlayerIndex)
+    const s = useGameStore.getState()
+    setMsDisplayPlayerIndex(s.msRollingPlayerIndex)
     setIsRolling(true)
-    state.msPerformRoll()
-  }, [state])
+    s.msPerformRoll()
+  }, [])
 
   const handleMsRollComplete = useCallback(() => {
     setIsRolling(false)
     const s = useGameStore.getState()
     if (s.phase === 'msRolling') {
       setAwaitingMsContinue(true)
+    } else {
+      // Last player rolled → phase moved to msAnimating, clear override
+      setMsDisplayPlayerIndex(null)
     }
   }, [])
 
